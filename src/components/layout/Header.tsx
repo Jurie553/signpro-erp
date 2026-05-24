@@ -1,7 +1,6 @@
 import React from 'react';
-import { Search, Plus, Bell, Wifi, WifiOff, Loader2 } from 'lucide-react';
+import { Search, Bell, Loader2 } from 'lucide-react';
 import { useFirestoreConnection } from '@/src/lib/firestoreService';
-import { useAuth } from '@/src/lib/authContext';
 import { cn } from '@/src/lib/utils';
 
 interface HeaderProps {
@@ -10,11 +9,7 @@ interface HeaderProps {
 
 export function Header({ title }: HeaderProps) {
   const { isConnected } = useFirestoreConnection();
-  const { user } = useAuth();
-  
-  const initials = user?.displayName
-    ? user.displayName.split(' ').map(n => n[0]).join('')
-    : user?.email?.charAt(0).toUpperCase() || 'AU';
+  const initials = 'SP';
   
   return (
     <header className="h-28 bg-white/80 backdrop-blur-xl border-b border-slate-100 px-10 flex items-center justify-between sticky top-0 z-10 shrink-0">
@@ -63,10 +58,10 @@ export function Header({ title }: HeaderProps) {
             </div>
             <div className="hidden lg:flex flex-col">
               <span className="text-sm font-black text-text-main leading-none uppercase tracking-tight italic font-serif">
-                {user?.displayName || user?.email?.split('@')[0] || 'Guest'}
+                SignPro ERP
               </span>
               <span className="text-[10px] font-bold text-creative uppercase tracking-[0.2em] mt-1.5 opacity-80">
-                {user ? 'Studio Access' : 'External'}
+                Open Access
               </span>
             </div>
           </div>
