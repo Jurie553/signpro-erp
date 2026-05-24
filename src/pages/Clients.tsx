@@ -1,17 +1,23 @@
-import React, { useState, useRef } from 'react';
-import { Search, Plus, ListFilter, Trash2, Edit2, Mail, Phone, Building2, Upload, Loader2, History, FileText, Briefcase, Clock, ExternalLink, X } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Search, Plus, ListFilter, Trash2, Edit2, Mail, Phone, Building2, Upload, Loader2, History, FileText, Briefcase, Clock, ExternalLink, X, CheckCircle2 } from 'lucide-react';
 import Papa from 'papaparse';
 import { cn } from '@/src/lib/utils';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useCollection, createDocument, updateDocument, deleteDocument } from '../lib/firestoreService';
 import { Client, Quote, Job } from '../types';
 import QuoteModal from '../components/QuoteModal';
+import { motion, AnimatePresence } from 'motion/react';
 import JobModal from '../components/JobModal';
+import ConfirmationModal from '../components/ConfirmationModal';
+import { toast } from 'sonner';
 
 export default function Clients() {
   const { data: clients, loading } = useCollection<Client>('clients');
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [clientToDelete, setClientToDelete] = useState<string | null>(null);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [historyClient, setHistoryClient] = useState<Client | null>(null);
   const [viewingQuote, setViewingQuote] = useState<Quote | null>(null);
@@ -32,15 +38,25 @@ export default function Clients() {
     setIsModalOpen(true);
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = (id: string) => {
     console.log('Button Click: Delete Client', { id });
-    if (confirm('Delete this client?')) {
-      setIsUpdating(id);
-      try {
-        await deleteDocument('clients', id);
-      } finally {
-        setIsUpdating(null);
-      }
+    setClientToDelete(id);
+    setIsDeleteModalOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!clientToDelete) return;
+    
+    setIsUpdating(clientToDelete);
+    try {
+      await deleteDocument('clients', clientToDelete);
+      toast.success('Client registry entry removed.');
+      setIsDeleteModalOpen(false);
+    } catch (error) {
+      toast.error('Failed to remove client.');
+    } finally {
+      setIsUpdating(null);
+      setClientToDelete(null);
     }
   };
 
@@ -53,34 +69,43 @@ export default function Clients() {
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
+      transformHeader: (h) => h.trim(),
       complete: async (results) => {
         try {
           const newClients = results.data as any[];
           let importedCount = 0;
+          
+          console.log('New clients data:', newClients);
 
           for (const row of newClients) {
-            // Map common header variations
-            const name = row.Name || row.name || row['Full Name'] || row.FullName;
-            const email = row.Email || row.email || row['Email Address'];
-            const phone = row.Phone || row.phone || row['Phone Number'] || row.Mobile;
-            
-            if (name && email) {
-              await createDocument('clients', {
-                name,
-                email,
-                phone: phone || '',
-                companyName: row['Company Name'] || row.Company || row.company || '',
-                address: row.Address || row.address || '',
-                vatNumber: row['VAT Number'] || row.VAT || row.vat || '',
-                createdAt: Date.now()
-              });
-              importedCount++;
+            try {
+              // Map common header variations
+              const name = row.Name || row.name || row['Full Name'] || row.FullName;
+              const email = row.Email || row.email || row['Email Address'];
+              const phone = row.Phone || row.phone || row['Phone Number'] || row.Mobile;
+              
+              if (name && email) {
+                await createDocument('clients', {
+                  name,
+                  email,
+                  phone: phone || '',
+                  companyName: row['Company Name'] || row.Company || row.company || '',
+                  address: row.Address || row.address || '',
+                  vatNumber: row['VAT Number'] || row.VAT || row.vat || '',
+                  createdAt: Date.now()
+                });
+                importedCount++;
+              } else {
+                console.warn('Skipping row due to missing name or email:', row);
+              }
+            } catch (err) {
+              console.error('Error importing row:', row, err);
             }
           }
-          alert(`Successfully imported ${importedCount} clients.`);
+          toast.success(`Successfully imported ${importedCount} clients.`);
         } catch (error) {
           console.error('Import error:', error);
-          alert('Failed to import clients. Please check your CSV format.');
+          toast.error('Failed to import clients. Please check your CSV format.');
         } finally {
           setIsImporting(false);
           if (fileInputRef.current) fileInputRef.current.value = '';
@@ -88,7 +113,7 @@ export default function Clients() {
       },
       error: (error) => {
         console.error('CSV parse error:', error);
-        alert('Error parsing CSV file.');
+        toast.error('Error parsing CSV file.');
         setIsImporting(false);
       }
     });
@@ -271,6 +296,17 @@ export default function Clients() {
           onClose={() => setViewingJob(null)} 
         />
       )}
+
+      <ConfirmationModal
+        isOpen={isDeleteModalOpen}
+        onClose={() => setIsDeleteModalOpen(false)}
+        onConfirm={confirmDelete}
+        title="Purge Client Record?"
+        message="This will permanently remove the client from the central registry. Existing quotes and jobs associated with this client will remain in the database but may lose their linked identity."
+        confirmText="Purge Record"
+        variant="danger"
+        isLoading={!!isUpdating}
+      />
     </div>
   );
 }
@@ -288,7 +324,6 @@ function ClientHistoryModal({
 }) {
   const { data: quotes } = useCollection<Quote>('quotes');
   const { data: jobs } = useCollection<Job>('jobs');
-  const [activeTab, setActiveTab] = useState<'quotes' | 'jobs'>('quotes');
 
   const clientQuotes = quotes
     .filter(q => q.clientId === client.id)
@@ -303,7 +338,7 @@ function ClientHistoryModal({
       <div className="bg-white w-full max-w-2xl h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
         <div className="p-8 border-b border-border flex items-center justify-between bg-blue-50/30">
           <div>
-            <h2 className="text-2xl font-black text-text-main tracking-tighter uppercase italic">{client.name}</h2>
+            <h2 className="text-2xl font-black text-text-main tracking-tighter uppercase italic font-serif">{client.name}</h2>
             <p className="text-[10px] font-bold text-text-muted uppercase tracking-widest mt-1">Client History Explorer</p>
           </div>
           <button onClick={onClose} className="p-3 hover:bg-white rounded-2xl transition-all shadow-sm group">
@@ -311,31 +346,13 @@ function ClientHistoryModal({
           </button>
         </div>
 
-        <div className="flex px-8 border-b border-border">
-          <button 
-            onClick={() => setActiveTab('quotes')}
-            className={cn(
-              "px-6 py-4 text-xs font-black uppercase tracking-widest transition-all relative",
-              activeTab === 'quotes' ? "text-brand" : "text-text-muted hover:text-text-main"
-            )}
-          >
-            Quotes ({clientQuotes.length})
-            {activeTab === 'quotes' && <div className="absolute bottom-0 left-0 right-0 h-1 bg-brand rounded-t-full" />}
-          </button>
-          <button 
-            onClick={() => setActiveTab('jobs')}
-            className={cn(
-              "px-6 py-4 text-xs font-black uppercase tracking-widest transition-all relative",
-              activeTab === 'jobs' ? "text-brand" : "text-text-muted hover:text-text-main"
-            )}
-          >
-            Jobcards ({clientJobs.length})
-            {activeTab === 'jobs' && <div className="absolute bottom-0 left-0 right-0 h-1 bg-brand rounded-t-full" />}
-          </button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-8 bg-gray-50/50">
-          {activeTab === 'quotes' ? (
+        <div className="flex-1 overflow-y-auto p-8 bg-gray-50/50 space-y-12 no-scrollbar">
+          {/* Quotes Section */}
+          <section>
+            <div className="flex items-center gap-3 mb-6">
+              <div className="h-8 w-1.5 bg-amber-500 rounded-full" />
+              <h3 className="text-xl font-black text-text-main italic uppercase tracking-tight font-serif">Quotations ({clientQuotes.length})</h3>
+            </div>
             <div className="space-y-4">
               {clientQuotes.map(quote => (
                 <div key={quote.id} className="bg-white p-6 rounded-[2rem] border border-border hover:shadow-xl hover:shadow-blue-500/5 transition-all group">
@@ -376,20 +393,27 @@ function ClientHistoryModal({
                     <div className="text-[10px] font-bold text-text-light uppercase tracking-widest">
                       {quote.items.length} Line Items
                     </div>
-                    <div className="text-sm font-black text-brand tracking-tight">
+                    <div className="text-sm font-black text-amber-600 tracking-tight">
                       R {quote.total.toLocaleString()}
                     </div>
                   </div>
                 </div>
               ))}
               {clientQuotes.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-20 text-text-light opacity-40">
-                  <FileText size={48} strokeWidth={1} className="mb-4" />
-                  <p className="text-[10px] font-black uppercase tracking-widest italic">No quotes found for this client</p>
+                <div className="flex flex-col items-center justify-center py-12 bg-white/50 rounded-[2rem] border border-dashed border-border text-text-light opacity-40">
+                  <FileText size={40} strokeWidth={1} className="mb-3" />
+                  <p className="text-[9px] font-black uppercase tracking-widest italic">No quotes found for this client</p>
                 </div>
               )}
             </div>
-          ) : (
+          </section>
+
+          {/* Jobs Section */}
+          <section>
+            <div className="flex items-center gap-3 mb-6">
+              <div className="h-8 w-1.5 bg-brand rounded-full" />
+              <h3 className="text-xl font-black text-text-main italic uppercase tracking-tight font-serif">Jobcards ({clientJobs.length})</h3>
+            </div>
             <div className="space-y-4">
               {clientJobs.map(job => (
                 <div key={job.id} className="bg-white p-6 rounded-[2rem] border border-border hover:shadow-xl hover:shadow-blue-500/5 transition-all">
@@ -439,13 +463,13 @@ function ClientHistoryModal({
                 </div>
               ))}
               {clientJobs.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-20 text-text-light opacity-40">
-                  <Briefcase size={48} strokeWidth={1} className="mb-4" />
-                  <p className="text-[10px] font-black uppercase tracking-widest italic">No jobcards found for this client</p>
+                <div className="flex flex-col items-center justify-center py-12 bg-white/50 rounded-[2rem] border border-dashed border-border text-text-light opacity-40">
+                  <Briefcase size={40} strokeWidth={1} className="mb-3" />
+                  <p className="text-[9px] font-black uppercase tracking-widest italic">No jobcards found for this client</p>
                 </div>
               )}
             </div>
-          )}
+          </section>
         </div>
       </div>
     </div>
@@ -463,21 +487,36 @@ function ClientModal({ client, onClose }: { client: Client | null, onClose: () =
     vatNumber: client?.vatNumber || ''
   });
 
+  const [showGuidedNextStep, setShowGuidedNextStep] = useState<string | null>(null);
+
+  const navigate = useNavigate();
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     console.log('Button Click: Save Client Details', { isEdit: !!client });
     setIsSaving(true);
     try {
-      const data = { ...formData, createdAt: client?.createdAt || Date.now() };
+      // Auto-populate company name if empty
+      const finalCompanyName = formData.companyName || formData.name;
+      const data = { 
+        ...formData, 
+        companyName: finalCompanyName,
+        createdAt: client?.createdAt || Date.now() 
+      };
+      let newClientId = client?.id;
       if (client) {
         await updateDocument('clients', client.id, data);
       } else {
-        await createDocument('clients', data as any);
+        const docId = await createDocument('clients', data as any);
+        if (docId) {
+          newClientId = docId;
+          setShowGuidedNextStep(newClientId);
+        }
       }
-      onClose();
+      if (!newClientId || client) onClose();
     } catch (error) {
       console.error('Error saving client:', error);
-      alert('Failed to save client details.');
+      toast.error('Failed to save client details.');
     } finally {
       setIsSaving(false);
     }
@@ -498,6 +537,11 @@ function ClientModal({ client, onClose }: { client: Client | null, onClose: () =
                 required
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                onBlur={() => {
+                  if (formData.name && !formData.companyName) {
+                    setFormData(prev => ({ ...prev, companyName: prev.name }));
+                  }
+                }}
                 className="w-full px-5 py-3 bg-gray-50 border border-border rounded-xl font-bold focus:outline-none focus:ring-4 focus:ring-brand/5 focus:border-brand"
               />
             </div>
@@ -549,6 +593,43 @@ function ClientModal({ client, onClose }: { client: Client | null, onClose: () =
             </button>
           </div>
         </form>
+
+        <AnimatePresence>
+          {showGuidedNextStep && (
+            <motion.div 
+               initial={{ opacity: 0 }}
+               animate={{ opacity: 1 }}
+               exit={{ opacity: 0 }}
+               className="absolute inset-0 bg-white/95 backdrop-blur-md z-50 flex flex-col items-center justify-center p-12 text-center"
+            >
+               <div className="w-20 h-20 bg-emerald-50 text-emerald-600 rounded-[2.5rem] flex items-center justify-center mb-6 border border-emerald-100">
+                  <CheckCircle2 size={32} />
+               </div>
+               <h3 className="text-2xl font-black text-text-main tracking-tighter uppercase italic">Client Logged</h3>
+               <p className="text-[10px] font-black text-text-light uppercase tracking-[0.3em] mt-3">The entity has been recorded. What is the next command?</p>
+               
+               <div className="grid grid-cols-1 gap-3 w-full mt-10">
+                  <button 
+                    onClick={() => {
+                       navigate(`/quotes?clientId=${showGuidedNextStep}`);
+                    }}
+                    className="w-full flex items-center justify-center gap-4 py-5 bg-brand text-white rounded-[2rem] text-[10px] font-black uppercase tracking-[0.2em] shadow-xl shadow-brand/20 hover:-translate-y-1 transition-all"
+                  >
+                     Generate First Quote
+                     <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
+                        <FileText size={16} />
+                     </div>
+                  </button>
+                  <button 
+                    onClick={onClose}
+                    className="w-full py-4 text-[9px] font-black text-text-muted uppercase tracking-[0.2em] hover:text-text-main transition-colors"
+                  >
+                     Dismiss & Return to Registry
+                  </button>
+               </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );

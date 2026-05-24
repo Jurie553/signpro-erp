@@ -1,17 +1,11 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { 
-  User, 
-  onAuthStateChanged, 
-  signInWithPopup, 
-  GoogleAuthProvider,
-  signOut 
-} from 'firebase/auth';
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { onAuthStateChanged, User } from 'firebase/auth';
 import { auth } from './firebase';
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  login: () => Promise<void>;
+  login?: () => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -26,22 +20,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(user);
       setLoading(false);
     });
-
     return unsubscribe;
   }, []);
 
-  const login = async () => {
-    const provider = new GoogleAuthProvider();
-    await signInWithPopup(auth, provider);
-  };
-
   const logout = async () => {
-    await signOut(auth);
+    await auth.signOut();
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
-      {!loading && children}
+    <AuthContext.Provider value={{ user, loading, logout }}>
+      {children}
     </AuthContext.Provider>
   );
 }

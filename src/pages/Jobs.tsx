@@ -1,10 +1,14 @@
 import React, { useState } from 'react';
-import { Search, Filter, Edit2, Share2, Trash2, CheckCircle2, Clock, AlertTriangle, Calendar, X, ChevronUp, ChevronDown, Plus, Mail, MessageCircle } from 'lucide-react';
+import { Search, Filter, Edit2, Share2, Trash2, CheckCircle2, Clock, AlertTriangle, Calendar, X, ChevronUp, ChevronDown, Plus, Mail, MessageCircle, FileText, ExternalLink, Printer, Settings, Wrench, Layers, Scissors, Check, Zap, Info, Book, Box } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { useCollection, updateDocument, deleteDocument } from '../lib/firestoreService';
-import { Job, Client, Department, CompanySettings } from '../types';
+import { Job, Client, Department, CompanySettings, Machine, Material } from '../types';
 import JobModal from '../components/JobModal';
+import JobDetailsModal from '../components/JobDetailsModal';
+import ConfirmationModal from '../components/ConfirmationModal';
 import { shareViaWhatsApp, shareViaEmail } from '../lib/messagingService';
+import { motion, AnimatePresence } from 'motion/react';
+import { toast } from 'sonner';
 
 const priorityStyles = {
   Urgent: "bg-red-50 text-red-600 border border-red-100",
@@ -29,9 +33,13 @@ export default function Jobs() {
   const { data: jobs, loading: jobsLoading } = useCollection<Job>('jobs');
   const { data: clients, loading: clientsLoading } = useCollection<Client>('clients');
   const { data: departments, loading: deptsLoading } = useCollection<Department>('departments');
+  const { data: machines } = useCollection<Machine>('machines');
+  const { data: materials } = useCollection<Material>('materials');
   const { data: companyList } = useCollection<CompanySettings>('company_settings');
 
   const [isUpdating, setIsUpdating] = useState<string | null>(null);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [jobToDelete, setJobToDelete] = useState<string | null>(null);
 
   const company = companyList.find(c => c.id === 'company') || companyList[0];
   
@@ -46,7 +54,9 @@ export default function Jobs() {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [editingJob, setEditingJob] = useState<Job | null>(null);
+  const [viewingJobDetails, setViewingJobDetails] = useState<Job | null>(null);
 
   const getClientName = (clientId: string) => {
     const client = clients.find(c => c.id === clientId);
@@ -108,15 +118,24 @@ export default function Jobs() {
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = (id: string) => {
     console.log('Button Click: Delete Job', { id });
-    if (confirm('Cancel this job?')) {
-      setIsUpdating(id);
-      try {
-        await deleteDocument('jobs', id);
-      } finally {
-        setIsUpdating(null);
-      }
+    setJobToDelete(id);
+    setIsDeleteModalOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!jobToDelete) return;
+    setIsUpdating(jobToDelete);
+    try {
+      await deleteDocument('jobs', jobToDelete);
+      toast.success('Production job cancelled and archived.');
+      setIsDeleteModalOpen(false);
+    } catch (error) {
+      toast.error('Failed to cancel job.');
+    } finally {
+      setIsUpdating(null);
+      setJobToDelete(null);
     }
   };
 
@@ -125,6 +144,9 @@ export default function Jobs() {
     setEditingJob(job);
     setIsModalOpen(true);
   };
+
+  const liveEditingJob = editingJob ? jobs.find(j => j.id === editingJob.id) : null;
+  const liveViewingJob = viewingJobDetails ? jobs.find(j => j.id === viewingJobDetails.id) : null;
 
   if (loading) {
     return (
@@ -138,7 +160,7 @@ export default function Jobs() {
     <div className="flex flex-col gap-10 animate-in fade-in duration-700">
       <header className="flex items-center justify-between">
         <div>
-          <h2 className="text-4xl font-black text-text-main tracking-tighter uppercase italic">Production Registry</h2>
+          <h2 className="text-4xl font-black text-text-main tracking-tighter uppercase italic font-serif">Production Registry</h2>
           <p className="text-[10px] font-black text-text-light uppercase tracking-[0.3em] mt-2">Historical and active job pipeline</p>
         </div>
         <button 
@@ -289,8 +311,12 @@ export default function Jobs() {
               {sortedJobs.map((job, idx) => (
                 <tr 
                   key={job.id} 
+                  onClick={() => {
+                    setViewingJobDetails(job);
+                    setIsDetailsOpen(true);
+                  }}
                   className={cn(
-                    "hover:bg-brand-accent/[0.02] transition-colors group animate-in fade-in slide-in-from-left-2 fill-mode-both relative",
+                    "hover:bg-brand-accent/[0.02] transition-colors group animate-in fade-in slide-in-from-left-2 fill-mode-both relative cursor-pointer",
                     isUpdating === job.id && "opacity-50 pointer-events-none"
                   )}
                   style={{ animationDelay: `${idx * 0.05}s` }}
@@ -350,7 +376,7 @@ export default function Jobs() {
                       {job.priority}
                     </span>
                   </td>
-                  <td className="px-10 py-8 text-center">
+                  <td className="px-10 py-8 text-center" onClick={(e) => e.stopPropagation()}>
                     <div className="relative group/sel inline-block">
                       <select 
                         value={job.stage}
@@ -364,7 +390,7 @@ export default function Jobs() {
                       </select>
                     </div>
                   </td>
-                  <td className="px-10 py-8 text-center">
+                  <td className="px-10 py-8 text-center" onClick={(e) => e.stopPropagation()}>
                     {job.artworkStatus === 'Approved' ? (
                       <span className="text-emerald-500 font-black text-[9px] uppercase tracking-[0.2em] flex items-center justify-center gap-2">
                         <div className="w-6 h-6 rounded-lg bg-emerald-50 flex items-center justify-center">
@@ -373,25 +399,65 @@ export default function Jobs() {
                         Verified
                       </span>
                     ) : job.artworkStatus === 'Pending' ? (
-                      <span className="text-amber-500 font-black text-[9px] uppercase tracking-[0.2em] bg-amber-50 px-3 py-1.5 rounded-full flex items-center justify-center gap-2 mx-auto w-fit border border-amber-100/50 shadow-sm">
-                        <Clock size={10} strokeWidth={3} className="animate-pulse" />
-                        In-Review
-                      </span>
+                      <div className="flex flex-col items-center gap-3 mx-auto w-fit">
+                        <span className="text-amber-500 font-black text-[9px] uppercase tracking-[0.2em] bg-amber-50 px-3 py-1.5 rounded-full flex items-center justify-center gap-2 border border-amber-100/50 shadow-sm">
+                          <Clock size={10} strokeWidth={3} className="animate-pulse" />
+                          In-Review
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const client = clients.find(c => c.id === job.clientId);
+                              if (client) shareViaWhatsApp('artwork', job, client, company);
+                            }}
+                            title="Share Artwork Proof via WhatsApp"
+                            className="p-2 bg-emerald-50 text-emerald-600 border border-emerald-100 rounded-lg hover:bg-emerald-500 hover:text-white transition-all shadow-sm"
+                          >
+                            <MessageCircle size={12} strokeWidth={2.5} />
+                          </button>
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const client = clients.find(c => c.id === job.clientId);
+                              if (client) shareViaEmail('artwork', job, client, company);
+                            }}
+                            title="Share Artwork Proof via Email"
+                            className="p-2 bg-brand/5 text-brand border border-brand/10 rounded-lg hover:bg-brand hover:text-white transition-all shadow-sm"
+                          >
+                            <Mail size={12} strokeWidth={2.5} />
+                          </button>
+                        </div>
+                      </div>
                     ) : (
                       <span className="text-text-light font-black opacity-30">—</span>
                     )}
                   </td>
-                  <td className="px-10 py-8 text-right">
+                  <td className="px-10 py-8 text-right" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center justify-end gap-3 translate-x-4 opacity-0 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300">
                       <button 
-                        onClick={() => handleEdit(job)}
+                        onClick={(e) => { e.stopPropagation(); handleEdit(job); }}
                         className="w-10 h-10 flex items-center justify-center text-text-light hover:text-brand-accent hover:bg-blue-50/50 rounded-2xl transition-all"
+                        title="Edit Job"
                       >
                         <Edit2 size={16} strokeWidth={2.5} />
                       </button>
+                      <button 
+                        onClick={(e) => { 
+                          e.stopPropagation(); 
+                          setViewingJobDetails(job);
+                          setIsDetailsOpen(true);
+                          setTimeout(() => window.print(), 500);
+                        }}
+                        className="w-10 h-10 flex items-center justify-center text-text-light hover:text-brand-accent hover:bg-blue-50/50 rounded-2xl transition-all"
+                        title="Print Job Card"
+                      >
+                        <Printer size={16} strokeWidth={2.5} />
+                      </button>
                       <div className="flex gap-1">
                         <button 
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
                             const client = clients.find(c => c.id === job.clientId);
                             if (client) shareViaWhatsApp('job', job, client, company);
                           }}
@@ -401,7 +467,8 @@ export default function Jobs() {
                           <MessageCircle size={16} strokeWidth={2.5} />
                         </button>
                         <button 
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
                             const client = clients.find(c => c.id === job.clientId);
                             if (client) shareViaEmail('job', job, client, company);
                           }}
@@ -412,7 +479,7 @@ export default function Jobs() {
                         </button>
                       </div>
                       <button 
-                        onClick={() => handleDelete(job.id)} 
+                        onClick={(e) => { e.stopPropagation(); handleDelete(job.id); }} 
                         className="w-10 h-10 flex items-center justify-center text-text-light hover:text-red-500 hover:bg-red-50/50 rounded-2xl transition-all"
                       >
                         <Trash2 size={16} strokeWidth={2.5} />
@@ -427,7 +494,7 @@ export default function Jobs() {
                     <div className="w-24 h-24 bg-surface text-text-light rounded-[2.5rem] flex items-center justify-center mx-auto mb-6 shadow-inner border border-border/50 group hover:scale-110 transition-transform duration-700">
                       <AlertTriangle size={40} className="group-hover:rotate-12 transition-transform" />
                     </div>
-                    <p className="text-xl font-black text-text-main tracking-tighter uppercase italic">No Matches Found</p>
+                    <p className="text-xl font-black text-text-main tracking-tighter uppercase italic font-serif">No Matches Found</p>
                     <p className="text-[10px] font-black text-text-light uppercase tracking-[0.3em] mt-2">Adjust your parameters or reset the matrix</p>
                     <button 
                       onClick={() => {
@@ -450,8 +517,37 @@ export default function Jobs() {
       <JobModal 
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        job={editingJob}
+        job={liveEditingJob}
+      />
+
+      {isDetailsOpen && liveViewingJob && (
+        <JobDetailsModal 
+          job={liveViewingJob}
+          clientId={liveViewingJob.clientId}
+          clients={clients}
+          departments={departments}
+          machines={machines}
+          materials={materials}
+          onClose={() => setIsDetailsOpen(false)}
+          onEdit={(job) => {
+            setIsDetailsOpen(false);
+            setEditingJob(job);
+            setIsModalOpen(true);
+          }}
+        />
+      )}
+
+      <ConfirmationModal
+        isOpen={isDeleteModalOpen}
+        onClose={() => setIsDeleteModalOpen(false)}
+        onConfirm={confirmDelete}
+        title="Cease Production?"
+        message="This will immediately halt and cancel this production job. Historical logs for this job will be archived, but it will be removed from active workflows."
+        confirmText="Cancel Job"
+        variant="danger"
+        isLoading={!!isUpdating}
       />
     </div>
   );
 }
+

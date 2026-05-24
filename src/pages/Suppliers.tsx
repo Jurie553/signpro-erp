@@ -1,14 +1,18 @@
 import React, { useState, useRef } from 'react';
-import { Phone, Mail, Clock, Edit2, Search, Plus, Trash2, AlertTriangle, Upload, Loader2 } from 'lucide-react';
+import { Phone, Mail, Clock, Edit2, Search, Plus, Trash2, AlertTriangle, Upload, Loader2, Download } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { useCollection, createDocument, updateDocument, deleteDocument } from '../lib/firestoreService';
 import { Supplier } from '../types';
 import Papa from 'papaparse';
+import ConfirmationModal from '../components/ConfirmationModal';
+import { toast } from 'sonner';
 
 export default function Suppliers() {
   const { data: suppliers, loading } = useCollection<Supplier>('suppliers');
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [supplierToDelete, setSupplierToDelete] = useState<string | null>(null);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [isUpdating, setIsUpdating] = useState<string | null>(null);
@@ -49,10 +53,10 @@ export default function Suppliers() {
               importedCount++;
             }
           }
-          alert(`Successfully imported ${importedCount} suppliers.`);
+          toast.success(`Successfully imported ${importedCount} suppliers.`);
         } catch (error) {
           console.error('Import error:', error);
-          alert('Failed to import suppliers. Please check your CSV format.');
+          toast.error('Failed to import suppliers. Please check your CSV format.');
         } finally {
           setIsImporting(false);
           if (fileInputRef.current) fileInputRef.current.value = '';
@@ -60,10 +64,32 @@ export default function Suppliers() {
       },
       error: (error) => {
         console.error('CSV parse error:', error);
-        alert('Error parsing CSV file.');
+        toast.error('Error parsing CSV file.');
         setIsImporting(false);
       }
     });
+  };
+
+  const handleExportCSV = () => {
+    console.log('Action: Export Suppliers CSV');
+    const csv = Papa.unparse(suppliers.map(s => ({
+      Name: s.name,
+      Email: s.email,
+      Phone: s.phone,
+      'Contact Person': s.contactPerson,
+      Address: s.address,
+      'Lead Time': s.leadTime,
+      Categories: s.categories.join(', '),
+      Status: s.status
+    })));
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `suppliers_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    toast.success('Suppliers exported successfully.');
   };
 
   const filteredSuppliers = suppliers.filter(s => 
@@ -77,15 +103,24 @@ export default function Suppliers() {
     setIsModalOpen(true);
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = (id: string) => {
     console.log('Button Click: Delete Supplier', { id });
-    if (confirm('Delete this supplier?')) {
-      setIsUpdating(id);
-      try {
-        await deleteDocument('suppliers', id);
-      } finally {
-        setIsUpdating(null);
-      }
+    setSupplierToDelete(id);
+    setIsDeleteModalOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!supplierToDelete) return;
+    setIsUpdating(supplierToDelete);
+    try {
+      await deleteDocument('suppliers', supplierToDelete);
+      toast.success('Supplier decommissioned from network.');
+      setIsDeleteModalOpen(false);
+    } catch (error) {
+      toast.error('Failed to remove supplier.');
+    } finally {
+      setIsUpdating(null);
+      setSupplierToDelete(null);
     }
   };
 
@@ -125,6 +160,13 @@ export default function Suppliers() {
           >
             {isImporting ? <Loader2 size={18} className="animate-spin" /> : <Upload size={18} />}
             {isImporting ? 'Importing...' : 'Import CSV'}
+          </button>
+          <button 
+            onClick={handleExportCSV}
+            className="flex items-center gap-2 px-6 py-3 bg-white border border-border rounded-xl text-sm font-bold text-text-muted hover:border-brand hover:text-brand transition-all shadow-sm"
+          >
+            <Download size={18} />
+            Export CSV
           </button>
           <button 
             onClick={() => {
@@ -214,6 +256,17 @@ export default function Suppliers() {
           onClose={() => setIsModalOpen(false)} 
         />
       )}
+
+      <ConfirmationModal
+        isOpen={isDeleteModalOpen}
+        onClose={() => setIsDeleteModalOpen(false)}
+        onConfirm={confirmDelete}
+        title="Blacklist Supplier?"
+        message="Decommissioning this supplier will remove them from the procurement registry. Active orders from this vendor should be fulfilled before removal."
+        confirmText="Decommission"
+        variant="danger"
+        isLoading={!!isUpdating}
+      />
     </div>
   );
 }
@@ -244,7 +297,7 @@ function SupplierModal({ supplier, onClose }: { supplier: Supplier | null, onClo
       onClose();
     } catch (error) {
       console.error('Error saving supplier:', error);
-      alert('Failed to save supplier details.');
+      toast.error('Failed to save supplier details.');
     } finally {
       setIsSaving(false);
     }
@@ -281,6 +334,20 @@ function SupplierModal({ supplier, onClose }: { supplier: Supplier | null, onClo
                 <label className="block text-[10px] font-bold text-text-light uppercase tracking-widest mb-2">Email Address</label>
                 <input required type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} className="w-full px-5 py-3 bg-gray-50 border border-border rounded-xl font-bold focus:outline-none focus:ring-4 focus:ring-brand/5 focus:border-brand" />
               </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-[10px] font-bold text-text-light uppercase tracking-widest mb-2">Phone Number</label>
+                <input value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} className="w-full px-5 py-3 bg-gray-50 border border-border rounded-xl font-bold focus:outline-none focus:ring-4 focus:ring-brand/5 focus:border-brand" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-text-light uppercase tracking-widest mb-2">Lead Time</label>
+                <input value={formData.leadTime} onChange={(e) => setFormData({ ...formData, leadTime: e.target.value })} className="w-full px-5 py-3 bg-gray-50 border border-border rounded-xl font-bold focus:outline-none focus:ring-4 focus:ring-brand/5 focus:border-brand" placeholder="e.g. 2-3 Days" />
+              </div>
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-text-light uppercase tracking-widest mb-2">Address</label>
+              <textarea value={formData.address} onChange={(e) => setFormData({ ...formData, address: e.target.value })} className="w-full px-5 py-3 bg-gray-50 border border-border rounded-xl font-bold focus:outline-none focus:ring-4 focus:ring-brand/5 focus:border-brand h-20" />
             </div>
             <div>
               <label className="block text-[10px] font-bold text-text-light uppercase tracking-widest mb-2">Categories</label>

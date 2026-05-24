@@ -17,11 +17,17 @@ const addHeader = (doc: jsPDF, company: CompanySettings | undefined, title: stri
   // Logo area
   if (company?.logoUrl) {
     try {
-      // Attempt to add the image. We specify 'PNG' as a default format hint.
-      // Positioned at top left.
-      doc.addImage(company.logoUrl, 'PNG', 15, 12, 35, 18, undefined, 'FAST');
+      // Detect format from data URL prefix
+      let format = 'PNG';
+      if (company.logoUrl.startsWith('data:image/jpeg') || company.logoUrl.startsWith('data:image/jpg')) {
+        format = 'JPEG';
+      } else if (company.logoUrl.startsWith('data:image/webp')) {
+        format = 'WEBP';
+      }
+      
+      doc.addImage(company.logoUrl, format, 15, 12, 35, 18, undefined, 'FAST');
     } catch (e) {
-      // Fallback to text if image fails
+      console.error('PDF Logo Error:', e);
       doc.setFontSize(22);
       doc.setTextColor(31, 41, 55);
       doc.setFont('helvetica', 'bold');
@@ -34,37 +40,37 @@ const addHeader = (doc: jsPDF, company: CompanySettings | undefined, title: stri
     doc.text(company?.name || 'DYNAMIC PRINT HUB', 15, 25);
   }
 
-  // Company Details (Left) - Always show text details below logo area
+  // Company Details (Left)
   doc.setFontSize(8);
   doc.setTextColor(107, 114, 128);
   doc.setFont('helvetica', 'normal');
-  let y = 35; // Start below the logo (which is 12+18=30)
+  let y = 35;
   
   if (company) {
     if (company.registrationNumber) {
-      doc.text(`Company ID : ${company.registrationNumber}`, 15, y);
+      doc.text(`Co. Reg: ${company.registrationNumber}`, 15, y);
       y += 4;
     }
-    doc.text(company.address || '', 15, y);
-    y += 4;
+    if (company.address) {
+      const splitAddress = doc.splitTextToSize(company.address, 70);
+      doc.text(splitAddress, 15, y);
+      y += (splitAddress.length * 4);
+    }
     if (company.vatNumber) {
-      doc.text(`VAT ${company.vatNumber}`, 15, y);
+      doc.text(`VAT: ${company.vatNumber}`, 15, y);
       y += 4;
     }
-    doc.text(company.phone || '', 15, y);
-    y += 4;
-    doc.text(company.email || '', 15, y);
-    y += 4;
-    if (company.website) {
-      doc.text(company.website, 15, y);
+    const contactInfo = [company.phone, company.email, company.website].filter(Boolean).join(' | ');
+    if (contactInfo) {
+      doc.text(contactInfo, 15, y);
     }
   }
 
   // Title (Right)
   doc.setFontSize(32);
   doc.setTextColor(0, 0, 0);
-  doc.setFont('helvetica', 'normal');
-  doc.text(title, 195, 25, { align: 'right' });
+  doc.setFont('helvetica', 'bold');
+  doc.text(title.toUpperCase(), 195, 25, { align: 'right' });
   
   doc.setFontSize(10);
   doc.setFont('helvetica', 'bold');
@@ -103,7 +109,9 @@ export const generateJobCardPDF = (job: Job, client: Client | undefined, company
   // Items Table
   const tableData = (job.items || []).map((item, idx) => [
     (idx + 1).toString(),
-    item.description,
+    item.startNumber || item.endNumber 
+      ? `${item.description}\n(Numbering: ${item.startNumber ?? ''} to ${item.endNumber ?? ''})`
+      : item.description,
     item.length?.toString() || '-',
     item.width?.toString() || '-',
     item.type || '-',
@@ -117,43 +125,87 @@ export const generateJobCardPDF = (job: Job, client: Client | undefined, company
 
   autoTable(doc, {
     startY: 90,
-    head: [['#', 'Item & Description', 'Length_mm', 'Width_mm', 'Type', 'Qty', 'Rate', 'Disc', 'VAT %', 'VAT', 'Amount']],
-    body: tableData,
+    head: [['#', 'Item & Description', 'Length_mm', 'Width_mm', 'Type', 'Qty', 'Rate', 'VAT', 'Amount']],
+    body: tableData.map(row => [row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[9], row[10]]),
     headStyles: { fillColor: [31, 41, 55], textColor: 255, fontSize: 8, fontStyle: 'bold' },
     bodyStyles: { fontSize: 8 },
     columnStyles: {
       0: { cellWidth: 8 },
       1: { cellWidth: 'auto' },
-      10: { halign: 'right' }
+      8: { halign: 'right' }
     },
     theme: 'striped'
   });
 
   let finalY = (doc as any).lastAutoTable.finalY + 10;
 
+  // Totals Summary for Job Card
+  if (finalY > 260) { doc.addPage(); finalY = 20; }
+  doc.setFontSize(9);
+  doc.setTextColor(0, 0, 0);
+  
+  const rightX = 195;
+  const labelX = 160;
+
+  doc.setFont('helvetica', 'normal');
+  doc.text('Total Value (Inc. VAT)', labelX, finalY, { align: 'right' });
+  doc.setFont('helvetica', 'bold');
+  doc.text(formatCurrency(job.total), rightX, finalY, { align: 'right' });
+  finalY += 15;
+
   // Production Details
-  if (job.ncrDetails) {
-    if (finalY > 230) { doc.addPage(); finalY = 20; }
+  if (job.ncrDetails && Object.values(job.ncrDetails).some(v => !!v)) {
+    if (finalY > 260) { doc.addPage(); finalY = 20; }
     doc.setFontSize(10);
     doc.setFont('helvetica', 'bold');
-    doc.text('NCR PRODUCTION DETAILS', 15, finalY);
-    doc.setDrawColor(200, 200, 200);
+    doc.text('NCR PRODUCTION SPECIFICATIONS', 15, finalY);
+    doc.setDrawColor(31, 41, 55);
     doc.line(15, finalY + 2, 195, finalY + 2);
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
     finalY += 8;
-    doc.text(`Paper Colors: ${job.ncrDetails.paperColors}`, 15, finalY);
-    finalY += 5;
-    doc.text(`Numbering: ${job.ncrDetails.startNumber} to ${job.ncrDetails.endNumber}`, 15, finalY);
-    finalY += 5;
+    
+    if (job.ncrDetails.paperColors) {
+      doc.text(`Paper Sequence: ${job.ncrDetails.paperColors}`, 15, finalY);
+      finalY += 5;
+    }
+    if (job.ncrDetails.startNumber) {
+      doc.text(`Numbering Range: ${job.ncrDetails.startNumber} TO ${job.ncrDetails.endNumber}`, 15, finalY);
+      finalY += 5;
+    }
     if (job.ncrDetails.perforationPosition) {
       doc.text(`Perforation: ${job.ncrDetails.perforationPosition}`, 15, finalY);
       finalY += 5;
     }
     if (job.ncrDetails.bindingType) {
-      doc.text(`Binding: ${job.ncrDetails.bindingType} at ${job.ncrDetails.bindingPosition}`, 15, finalY);
+      doc.text(`Binding: ${job.ncrDetails.bindingType} (${job.ncrDetails.bindingPosition})`, 15, finalY);
       finalY += 5;
     }
+  }
+
+  // Artwork Status
+  if (finalY > 260) { doc.addPage(); finalY = 20; }
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'bold');
+  doc.text('ARTWORK & PRODUCTION STATUS', 15, finalY);
+  doc.line(15, finalY + 2, 195, finalY + 2);
+  finalY += 8;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.text(`Artwork Status: ${job.artworkStatus || 'Pending'}`, 15, finalY);
+  doc.text(`Current Stage: ${job.stage}`, 100, finalY);
+  finalY += 10;
+
+  // Internal Notes
+  if (job.notes) {
+    if (finalY > 260) { doc.addPage(); finalY = 20; }
+    doc.setFont('helvetica', 'bold');
+    doc.text('PRODUCTION NOTES:', 15, finalY);
+    finalY += 5;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    const splitNotes = doc.splitTextToSize(job.notes, 180);
+    doc.text(splitNotes, 15, finalY);
   }
 
   addFooter(doc);
@@ -161,6 +213,7 @@ export const generateJobCardPDF = (job: Job, client: Client | undefined, company
 };
 
 export const generateQuotePDF = (quote: Quote, client: Client | undefined, company: CompanySettings | undefined) => {
+  console.log('Generating PDF for quote:', quote?.quoteNumber, 'Items:', quote?.items?.length);
   const doc = new jsPDF();
 
   addHeader(doc, company, 'Quote', quote.quoteNumber);
@@ -177,19 +230,30 @@ export const generateQuotePDF = (quote: Quote, client: Client | undefined, compa
   doc.text(new Date(quote.createdAt).toLocaleDateString('en-ZA'), 195, 75, { align: 'right' });
 
   // Items Table
-  const tableData = quote.items.map((item, idx) => [
-    (idx + 1).toString(),
-    item.description,
-    item.length?.toString() || '-',
-    item.width?.toString() || '-',
-    item.type || '-',
-    item.quantity.toString(),
-    formatCurrency(item.unitCost).replace('ZAR', '').trim(),
-    '0.00%',
-    '15.00',
-    formatCurrency(item.totalPrice * 0.15).replace('ZAR', '').trim(),
-    formatCurrency(item.totalPrice).replace('ZAR', '').trim()
-  ]);
+  const tableData = quote.items.map((item, idx) => {
+    let discStr = '0.00%';
+    if (item.discountValue) {
+      discStr = item.discountType === 'amount' 
+        ? `R${item.discountValue.toFixed(2)}` 
+        : `${item.discountValue.toFixed(2)}%`;
+    }
+    
+    return [
+      (idx + 1).toString(),
+      item.startNumber || item.endNumber 
+        ? `${item.description}\n(Numbering: ${item.startNumber ?? ''} to ${item.endNumber ?? ''})`
+        : item.description,
+      item.length?.toString() || '-',
+      item.width?.toString() || '-',
+      item.type || '-',
+      item.quantity.toString(),
+      formatCurrency(item.basePrice ? item.basePrice / item.quantity : item.unitCost).replace('ZAR', '').trim(),
+      discStr,
+      '15.00',
+      formatCurrency(item.totalPrice * 0.15).replace('ZAR', '').trim(),
+      formatCurrency(item.totalPrice).replace('ZAR', '').trim()
+    ];
+  });
 
   autoTable(doc, {
     startY: 90,
@@ -208,7 +272,7 @@ export const generateQuotePDF = (quote: Quote, client: Client | undefined, compa
   let finalY = (doc as any).lastAutoTable.finalY + 10;
 
   // Totals Summary
-  if (finalY > 230) { doc.addPage(); finalY = 20; }
+  if (finalY > 260) { doc.addPage(); finalY = 20; }
   doc.setFontSize(9);
   doc.setTextColor(0, 0, 0);
   
@@ -233,7 +297,7 @@ export const generateQuotePDF = (quote: Quote, client: Client | undefined, compa
   finalY += 25;
 
   // VAT Summary
-  if (finalY > 230) { doc.addPage(); finalY = 20; }
+  if (finalY > 260) { doc.addPage(); finalY = 20; }
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
   doc.text('VAT Summary', 15, finalY);
@@ -255,7 +319,7 @@ export const generateQuotePDF = (quote: Quote, client: Client | undefined, compa
   finalY = (doc as any).lastAutoTable.finalY + 15;
 
   // Notes & Banking
-  if (finalY > 240) { doc.addPage(); finalY = 20; }
+  if (finalY > 260) { doc.addPage(); finalY = 20; }
   doc.setFontSize(9);
   doc.setFont('helvetica', 'bold');
   doc.text('Notes', 15, finalY);
@@ -282,17 +346,18 @@ export const generateQuotePDF = (quote: Quote, client: Client | undefined, compa
     doc.text(`VAT: ${company.vatNumber}`, 15, finalY);
   }
 
-  // Terms & Conditions Page
-  doc.addPage();
+  // Terms & Conditions
+  finalY += 10;
+  if (finalY > 260) { doc.addPage(); finalY = 20; }
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
-  doc.text('Terms & Conditions', 15, 20);
+  doc.text('Terms & Conditions', 15, finalY);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   const termsText = [
     'Lead Time on standard orders is 3-5 business days. Litho and Large signs 10-15 business days. All COD orders require a mandatory 70% deposit of total order value. Deposit is payable on acceptance of quote and the outstanding balance prior to collection. Orders requiring overtime (weekends and public holidays) will be charged accordingly.'
   ];
-  doc.text(termsText, 15, 30, { maxWidth: 180 });
+  doc.text(termsText, 15, finalY + 10, { maxWidth: 180 });
 
   addFooter(doc);
   return doc;

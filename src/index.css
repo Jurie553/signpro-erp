@@ -1,19 +1,23 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Lora:ital,wght@0,400;0,600;1,400;1,600&family=JetBrains+Mono:wght@400;500&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Outfit", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --font-serif: "Lora", serif;
   
-  --color-brand: #0f172a; /* Slate 900 for a more premium, professional feel */
-  --color-brand-accent: #3b82f6; /* Blue 500 for active states */
-  --color-surface: #f8fafc; /* Slate 50 */
+  --color-brand: #0f172a; /* Slate 900 */
+  --color-brand-accent: #6366f1; /* Indigo 500 - more vibrant than standard blue */
+  --color-creative: #f43f5e; /* Rose 500 for secondary energy */
+  --color-vibrant: #10b981; /* Emerald 500 */
+  --color-surface: #fdfcfb; /* Warm paper-like surface */
   --color-paper: #ffffff;
-  --color-border: #e2e8f0; /* Slate 200 */
-  --color-border-strong: #cbd5e1; /* Slate 300 */
+  --color-border: #e2e8f0; 
+  --color-border-strong: #cbd5e1; 
   
-  --color-text-main: #0f172a; /* Slate 900 */
-  --color-text-muted: #475569; /* Slate 600 */
-  --color-text-light: #94a3b8; /* Slate 400 */
+  --color-text-main: #1a1a1a; 
+  --color-text-muted: #525252; 
+  --color-text-light: #a3a3a3; 
   
   --radius-xl: 1rem;
   --radius-2xl: 1.5rem;
@@ -50,5 +54,59 @@
       linear-gradient(to right, var(--color-border) 1px, transparent 1px),
       linear-gradient(to bottom, var(--color-border) 1px, transparent 1px);
     background-position: center center;
+  }
+}
+
+@media print {
+  /* Hide everything by default */
+  body * {
+    visibility: hidden;
+  }
+  
+  /* Show only the targeted content */
+  .printable-content,
+  .printable-content * {
+    visibility: visible !important;
+  }
+
+  /* Reset positioning for the printable content so it fills the page */
+  .printable-content {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    padding: 20px !important;
+    margin: 0 !important;
+    background: white !important;
+    display: block !important;
+  }
+
+  /* Hide UI elements within the job card during print */
+  button, 
+  .no-print,
+  .backdrop-blur-sm,
+  .backdrop-blur-md,
+  header {
+    display: none !important;
+  }
+
+  /* Ensure background and borders are printed */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Force the job card container to take full width and remove rounding/shadows for print */
+  .max-w-2xl {
+    max-width: 100% !important;
+    width: 100% !important;
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+  }
+  
+  .bg-gray-50\/50 {
+    background: transparent !important;
   }
 }

@@ -1,6 +1,7 @@
 export type JobStage = 'Prepress' | 'Printing' | 'Laminating' | 'Finishing' | 'Quality Check' | 'Ready' | 'Delivered' | 'Cancelled' | 'Embroidery' | 'Screenprinting';
 export type JobPriority = 'Normal' | 'High' | 'Urgent';
 export type CostingMethod = 'Area' | 'Per Item' | 'NCR' | 'Hourly' | 'Page';
+export type SyncStatus = 'pending' | 'synced' | 'failed';
 
 export interface Client {
   id: string;
@@ -11,6 +12,23 @@ export interface Client {
   address?: string;
   vatNumber?: string;
   createdAt: number;
+  syncStatus?: SyncStatus;
+  lastSyncedAt?: number;
+  zohoContactId?: string;
+  // Additional fields for Zoho
+  contactPerson?: string;
+  mobile?: string;
+  billingAddress?: string;
+  shippingAddress?: string;
+  city?: string;
+  province?: string;
+  postalCode?: string;
+  country?: string;
+  notes?: string;
+  customerType?: string;
+  paymentTerms?: string;
+  creditLimit?: number;
+  activeStatus?: boolean;
 }
 
 export interface Supplier {
@@ -33,11 +51,16 @@ export interface Material {
   minStock: number;
   unit: string;
   costPrice: number;
+  costPerSqm?: number;
+  sellPerSqm?: number;
   location: string;
   supplierId: string;
   thickness?: string;
   materialType?: string;
+  printMethods?: string[];
+  inkTypes?: string[];
   printingConsiderations?: string;
+  conversions?: Record<string, number>;
 }
 
 export interface Machine {
@@ -52,6 +75,8 @@ export interface Machine {
   costUnit: 'hr' | 'm²' | 'item' | 'copy' | 'page';
   status: 'Active' | 'Idle' | 'Maintenance';
   utilization?: number;
+  lastMaintenanceDate?: number;
+  nextMaintenanceDate?: number;
 }
 
 export interface Department {
@@ -73,6 +98,18 @@ export interface Product {
   setupTime: number; // in minutes
   markupPercent: number;
   costingMethod: CostingMethod;
+  dimensions?: string;
+  minimumOrderQuantity?: number;
+  turnaroundTime?: string;
+  finishingOptions?: string[];
+}
+
+export interface SignageProduct extends Product {
+  subtitle: string;
+  substrateOptions: string[];
+  environmentTags: string[];
+  basePriceRate: number; // Price per m²
+  thicknessOptions: string[];
 }
 
 export interface QuoteItem {
@@ -81,13 +118,25 @@ export interface QuoteItem {
   originId: string;
   productId?: string; // Keep for backward compatibility or refactor later
   materialId?: string;
+  machineId?: string;
   description: string;
   width?: number; // in mm
   length?: number; // in mm
   quantity: number;
   unitCost: number;
   totalCost: number;
+  discountType?: 'percentage' | 'amount';
+  discountValue?: number;
+  basePrice?: number;
   totalPrice: number;
+  startNumber?: string;
+  endNumber?: string;
+  perforationPosition?: string;
+  bindingType?: string;
+  bindingPosition?: string;
+  firstPageColor?: string;
+  secondPageColor?: string;
+  lastPageColor?: string;
 }
 
 export interface PricingSettings {
@@ -107,6 +156,7 @@ export interface PricingSettings {
   ncrNumberingFee: number;
   ncrPerforationFee: number;
   ncrCoverFee: number;
+  materialMarkupPercent: number;
 }
 
 export interface CompanySettings {
@@ -122,6 +172,7 @@ export interface CompanySettings {
   branchCode?: string;
   website?: string;
   logoUrl?: string;
+  jobCardPrefix?: string;
   // Messaging Templates
   quoteEmailTemplate?: string;
   quoteWhatsappTemplate?: string;
@@ -143,6 +194,7 @@ export interface Quote {
   vat: number;
   total: number;
   profit: number;
+  notes?: string;
   status: 'Draft' | 'Sent' | 'Viewed' | 'Accepted' | 'Rejected' | 'Expired';
   expiryDate: number;
   createdAt: number;
@@ -164,6 +216,9 @@ export interface NCRBook {
   binding: string;
   print: string;
   options: string[];
+  paperWeight?: string;
+  coverType?: string;
+  turnaroundTime?: string;
   pricingGrid: NCRPricingTier[];
   status: 'Active' | 'Archived';
   createdAt: number;
@@ -185,6 +240,8 @@ export interface Package {
   savings: number;
   savingsPercent: number;
   category: string;
+  leadTime?: string;
+  targetAudience?: string;
   status: 'Active' | 'Inactive';
   createdAt: number;
 }
@@ -203,6 +260,9 @@ export interface LithoProduct {
   size: string;
   paperType: string;
   finishing?: string;
+  colorProfile?: string;
+  bleedRequirement?: string;
+  turnaroundTime?: string;
   pricingGrid: LithoPricingTier[];
   status: 'Active' | 'Archived';
   createdAt: number;
@@ -223,6 +283,25 @@ export interface PurchaseOrder {
   totalCost: number;
 }
 
+export interface JobTemplate {
+  id: string;
+  name: string;
+  description?: string;
+  productName: string;
+  departmentId?: string;
+  items?: QuoteItem[];
+  ncrDetails?: {
+    paperColors: string;
+    startNumber: string;
+    endNumber: string;
+    perforationPosition?: string;
+    bindingType?: string;
+    bindingPosition?: string;
+  };
+  notes?: string;
+  createdAt: number;
+}
+
 export interface Job {
   id: string;
   jobNumber: string;
@@ -238,16 +317,31 @@ export interface Job {
     status: 'Pending' | 'Approved' | 'Changes Requested';
     version: number;
     uploadedAt: number;
-    feedback?: string;
+    feedback?: string; // Kept for legacy compatibility
+    comments?: {
+      id: string;
+      text: string;
+      author: 'Client' | 'Staff' | 'System';
+      createdAt: number;
+    }[];
   }[];
   items?: QuoteItem[];
   total?: number;
   profit?: number;
   stage: JobStage;
+  status?: 'Active' | 'Completed';
   priority: JobPriority;
   dueDate: number;
   assignedMachineId?: string;
   artworkStatus: 'Pending' | 'Approved' | 'N/A';
+  completionPhotos?: {
+    id: string;
+    url: string;
+    uploadedAt: number;
+    notes?: string;
+  }[];
+  productionSteps?: string[];
+  designReferenceImageUrl?: string;
   ncrDetails?: {
     paperColors: string;
     startNumber: string;
@@ -256,5 +350,6 @@ export interface Job {
     bindingType?: string;
     bindingPosition?: string;
   };
+  notes?: string;
   createdAt: number;
 }

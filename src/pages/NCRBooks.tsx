@@ -5,6 +5,7 @@ import { useCollection, createDocument, updateDocument, deleteDocument } from '.
 import { NCRBook, PricingSettings, NCRPricingTier } from '../types';
 import { DEFAULT_PRICING_SETTINGS, calculateNCRPrice } from '../lib/pricingService';
 import QuoteModal from '../components/QuoteModal';
+import { toast } from 'sonner';
 
 export default function NCRBooks() {
   const { data: books, loading: booksLoading } = useCollection<NCRBook>('ncr_books');
@@ -36,14 +37,32 @@ export default function NCRBooks() {
 
   const handleDelete = async (id: string) => {
     console.log('Button Click: Delete NCR Specification', { id });
-    if (confirm('Are you sure you want to remove this NCR specification?')) {
-      setIsUpdating(id);
-      try {
-        await deleteDocument('ncr_books', id);
-      } finally {
-        setIsUpdating(null);
-      }
-    }
+    toast.custom((t) => (
+      <div className="bg-white p-6 rounded-3xl shadow-2xl border border-border min-w-[320px] animate-in slide-in-from-bottom-5">
+        <h3 className="text-sm font-black uppercase tracking-tight text-text-main mb-2">Delete NCR Specification?</h3>
+        <p className="text-xs text-text-light font-bold mb-6">This action cannot be undone. All related quoting data for this spec will need to be re-entered if removed.</p>
+        <div className="flex gap-3">
+          <button onClick={() => toast.dismiss(t)} className="flex-1 py-3 bg-surface text-[10px] font-black uppercase tracking-widest rounded-xl border border-border">Cancel</button>
+          <button 
+            onClick={async () => {
+              toast.dismiss(t);
+              setIsUpdating(id);
+              try {
+                await deleteDocument('ncr_books', id);
+                toast.success('NCR specification removed from registry.');
+              } catch (error) {
+                toast.error('Failed to remove record.');
+              } finally {
+                setIsUpdating(null);
+              }
+            }} 
+            className="flex-1 py-3 bg-red-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl shadow-lg shadow-red-100"
+          >
+            Remove Spec
+          </button>
+        </div>
+      </div>
+    ));
   };
 
   if (loading) {
@@ -397,6 +416,15 @@ function CalculatorModal({ settings, onClose, books, onAddToQuote }: { settings:
                     />
                     <span className="text-[10px] font-black text-text-light uppercase tracking-widest group-hover:text-text-main transition-colors">Perforation</span>
                   </label>
+                  <label className="flex items-center gap-3 cursor-pointer group">
+                    <input 
+                      type="checkbox" 
+                      checked={spec.cover}
+                      onChange={(e) => setSpec({ ...spec, cover: e.target.checked })}
+                      className="w-4 h-4 rounded border-border text-brand-accent focus:ring-brand-accent"
+                    />
+                    <span className="text-[10px] font-black text-text-light uppercase tracking-widest group-hover:text-text-main transition-colors">Wrap-around Cover</span>
+                  </label>
                 </div>
               </div>
             )}
@@ -486,7 +514,7 @@ function CalculatorModal({ settings, onClose, books, onAddToQuote }: { settings:
                     // We need a way to handle automated items in QuoteModal
                     // For now let's just use the registry if possible, 
                     // or implement a generic handling in next iteration
-                    alert('Automated quote generation is coming in the next build. Use Registry Lookup for now.');
+                    toast.info('Automated quote generation is coming soon. Use Registry Lookup for now.');
                   }
                   onClose();
                 }}
@@ -513,6 +541,9 @@ function RegisterModal({ book, onClose }: { book: NCRBook | null, onClose: () =>
     binding: book?.binding || 'Glued',
     print: book?.print || 'Single-sided',
     options: book?.options || [],
+    paperWeight: book?.paperWeight || '60gsm',
+    coverType: book?.coverType || 'Wrap-around cover (Crocboard)',
+    turnaroundTime: book?.turnaroundTime || '5-7 business days',
     pricingGrid: book?.pricingGrid || [{ quantity: 5, cost: 0, sell: 0 }],
     status: book?.status || 'Active'
   });
@@ -560,7 +591,7 @@ function RegisterModal({ book, onClose }: { book: NCRBook | null, onClose: () =>
       onClose();
     } catch (error) {
       console.error('Error saving NCR book:', error);
-      alert('Failed to save NCR specifications.');
+      toast.error('Failed to save NCR specifications.');
     } finally {
       setIsSaving(false);
     }
@@ -645,6 +676,39 @@ function RegisterModal({ book, onClose }: { book: NCRBook | null, onClose: () =>
                    value={formData.print}
                    onChange={(e) => setFormData({ ...formData, print: e.target.value })}
                    className="w-full px-6 py-4 bg-gray-50 border border-border rounded-2xl font-black"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-6">
+              <div>
+                <label className="block text-[10px] font-black text-text-light uppercase tracking-[0.3em] mb-3">Paper Weight</label>
+                <input 
+                   type="text"
+                   value={formData.paperWeight}
+                   onChange={(e) => setFormData({ ...formData, paperWeight: e.target.value })}
+                   className="w-full px-6 py-4 bg-gray-50 border border-border rounded-2xl font-black"
+                   placeholder="e.g. 60gsm"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-black text-text-light uppercase tracking-[0.3em] mb-3">Cover Type</label>
+                <input 
+                   type="text"
+                   value={formData.coverType}
+                   onChange={(e) => setFormData({ ...formData, coverType: e.target.value })}
+                   className="w-full px-6 py-4 bg-gray-50 border border-border rounded-2xl font-black"
+                   placeholder="e.g. Crocboard Cover"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-black text-text-light uppercase tracking-[0.3em] mb-3">Turnaround Time</label>
+                <input 
+                   type="text"
+                   value={formData.turnaroundTime}
+                   onChange={(e) => setFormData({ ...formData, turnaroundTime: e.target.value })}
+                   className="w-full px-6 py-4 bg-gray-50 border border-border rounded-2xl font-black"
+                   placeholder="e.g. 5-7 business days"
                 />
               </div>
             </div>

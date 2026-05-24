@@ -20,106 +20,170 @@ import {
   LogOut,
   ChevronLeft,
   Layers,
-  Printer
+  Printer,
+  ChevronDown,
+  Shirt
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
+import { useLocation } from 'react-router-dom';
 
 const navItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
-  { icon: Users, label: 'Clients', path: '/clients' },
-  { icon: Box, label: 'Materials', path: '/materials' },
-  { icon: Truck, label: 'Suppliers', path: '/suppliers' },
-  { icon: Tag, label: 'Products', path: '/products' },
-  { icon: BookOpen, label: 'NCR Registry', path: '/ncr-books' },
-  { icon: Printer, label: 'Litho Registry', path: '/litho-products' },
-  { icon: Package, label: 'Packages', path: '/packages' },
+  { icon: Columns, label: 'Production Board', path: '/production-board' },
   { icon: FileText, label: 'Quotes', path: '/quotes' },
   { icon: Briefcase, label: 'Jobs', path: '/jobs' },
-  { icon: Columns, label: 'Production Board', path: '/production-board' },
-  { icon: Cpu, label: 'Machines', path: '/machines' },
-  { icon: Layers, label: 'Departments', path: '/departments' },
-  { icon: Warehouse, label: 'Inventory', path: '/inventory' },
-  { icon: ShoppingCart, label: 'Purchasing', path: '/purchasing' },
-  { icon: BarChart3, label: 'Reports', path: '/reports' },
-  { icon: Cpu, label: 'Utilization', path: '/utilization' },
-  { icon: History, label: 'Order History', path: '/order-history' },
-  { icon: Settings, label: 'Settings', path: '/settings' },
+  { icon: Users, label: 'Clients', path: '/clients' },
+  { 
+    icon: Box, 
+    label: 'Products', 
+    path: '/inventory-group',
+    children: [
+      { icon: LayoutDashboard, label: 'Overview', path: '/inventory-registry' },
+      { icon: Box, label: 'Materials', path: '/materials' },
+      { icon: Printer, label: 'Litho Printing', path: '/litho-products' },
+      { icon: BookOpen, label: 'NCR Books', path: '/ncr-books' },
+      { icon: Package, label: 'Packages', path: '/packages' },
+    ]
+  },
+  { 
+    icon: Truck, 
+    label: 'Procurement', 
+    path: '/procurement-group',
+    children: [
+      { icon: Warehouse, label: 'Inventory', path: '/inventory' },
+      { icon: Truck, label: 'Suppliers', path: '/suppliers' },
+      { icon: ShoppingCart, label: 'Purchasing', path: '/purchasing' },
+    ]
+  },
+  { 
+    icon: Settings, 
+    label: 'Settings', 
+    path: '/settings-group',
+    children: [
+      { icon: Settings, label: 'General', path: '/settings' },
+      { icon: Cpu, label: 'Machines', path: '/machines' },
+      { icon: Layers, label: 'Departments', path: '/departments' },
+      { icon: BarChart3, label: 'Reports', path: '/reports' },
+      { icon: Cpu, label: 'Utilization', path: '/utilization' },
+      { icon: History, label: 'Order History', path: '/order-history' },
+    ]
+  },
 ];
 
 export function Sidebar() {
-  const [collapsed, setCollapsed] = React.useState(false);
+  const [collapsed, setCollapsed] = React.useState(true);
+  const [openSubmenus, setOpenSubmenus] = React.useState<string[]>(['/inventory-group', '/settings-group', '/procurement-group']);
+  const { pathname } = useLocation();
+
+  const toggleSubmenu = (path: string) => {
+    setOpenSubmenus(prev => 
+      prev.includes(path) ? prev.filter(p => p !== path) : [...prev, path]
+    );
+  };
 
   return (
     <aside className={cn(
-      "bg-paper border-r border-border flex flex-col h-screen transition-all duration-500 relative z-20 ease-[cubic-bezier(0.23,1,0.32,1)]",
+      "bg-white border-r border-slate-200 flex flex-col h-screen transition-all duration-300 relative z-20 shadow-sm",
       collapsed ? "w-20" : "w-72"
     )}>
-      <div className="p-8 flex items-center gap-4">
-        <div className="w-10 h-10 bg-brand rounded-2xl flex items-center justify-center text-white shrink-0 shadow-xl shadow-brand/10 group overflow-hidden relative">
-          <div className="absolute inset-0 bg-brand-accent transform translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
-          <span className="relative z-10 font-black text-sm tracking-tighter">XP</span>
+      <div className="p-6 flex items-center gap-3 border-b border-slate-100">
+        <div className="w-10 h-10 bg-slate-900 rounded-lg flex items-center justify-center text-white shrink-0 shadow-md">
+          <span className="font-bold text-sm tracking-tight">SP</span>
         </div>
         {!collapsed && (
-          <div className="flex flex-col animate-in fade-in slide-in-from-left-2 duration-500">
-            <h1 className="font-black text-base leading-none text-text-main tracking-tighter uppercase italic">XPressPrint</h1>
-            <p className="text-[9px] text-text-light font-black uppercase tracking-[0.2em] mt-1">Management ERP</p>
+          <div className="flex flex-col">
+            <h1 className="font-bold text-lg leading-none text-slate-900 tracking-tight">SignPro</h1>
+            <span className="text-[10px] text-slate-500 font-medium uppercase tracking-widest mt-0.5">Corporate ERP</span>
           </div>
         )}
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-4 space-y-1.5 scrollbar-hide py-4">
-        {navItems.map((item) => (
-          <NavLink
-            key={item.path}
-            to={item.path}
-            className={({ isActive }) => cn(
-              "flex items-center gap-3 px-4 py-3.5 transition-all rounded-2xl font-bold relative group",
-              isActive 
-                ? "text-brand-accent bg-blue-50/50" 
-                : "text-text-muted hover:text-text-main hover:bg-surface"
-            )}
-          >
-            {({ isActive }) => (
-              <>
-                <item.icon size={18} strokeWidth={isActive ? 2.5 : 2} className={cn("shrink-0 transition-transform group-active:scale-90", collapsed && "mx-auto")} />
-                {!collapsed && <span className="text-xs uppercase tracking-widest">{item.label}</span>}
-                {isActive && !collapsed && (
-                  <div className="absolute right-4 w-1.5 h-1.5 bg-brand-accent rounded-full shadow-[0_0_10px_rgba(59,130,246,0.5)]" />
+      <nav className="flex-1 overflow-y-auto px-3 space-y-1 py-4">
+        {navItems.map((item) => {
+          const hasChildren = item.children && item.children.length > 0;
+          const isSubmenuOpen = openSubmenus.includes(item.path);
+          const isChildActive = hasChildren && item.children?.some(child => pathname === child.path);
+          const isItemActive = pathname === item.path || isChildActive;
+
+          if (hasChildren) {
+            return (
+              <div key={item.path} className="space-y-0.5">
+                <button
+                  onClick={() => !collapsed && toggleSubmenu(item.path)}
+                  className={cn(
+                    "w-full flex items-center gap-3 px-3 py-3 transition-colors rounded-lg font-medium",
+                    isChildActive 
+                      ? "text-blue-700 bg-blue-50" 
+                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                  )}
+                >
+                  <item.icon size={18} strokeWidth={2} className={cn("shrink-0", isChildActive && "text-blue-700")} />
+                  {!collapsed && (
+                    <>
+                      <span className="text-xs font-semibold flex-1 text-left tracking-wide">{item.label}</span>
+                      <ChevronDown size={14} className={cn("transition-transform duration-300", isSubmenuOpen && "rotate-180")} />
+                    </>
+                  )}
+                </button>
+                
+                {!collapsed && isSubmenuOpen && (
+                  <div className="pl-6 space-y-0.5">
+                    {item.children?.map((child) => (
+                      <NavLink
+                        key={child.path}
+                        to={child.path}
+                        className={({ isActive }) => cn(
+                          "flex items-center gap-3 px-3 py-2.5 transition-colors rounded-lg font-medium",
+                          isActive 
+                            ? "text-blue-700 bg-blue-50/50" 
+                            : "text-slate-500 hover:text-slate-900 hover:bg-slate-50"
+                        )}
+                      >
+                        <child.icon size={14} strokeWidth={2} className={cn("shrink-0", "text-slate-400")} />
+                        <span className="text-[11px] uppercase tracking-wider">{child.label}</span>
+                      </NavLink>
+                    ))}
+                  </div>
                 )}
-              </>
-            )}
-          </NavLink>
-        ))}
+              </div>
+            );
+          }
+
+          return (
+            <NavLink
+              key={item.path}
+              to={item.path}
+              className={({ isActive }) => cn(
+                "flex items-center gap-3 px-3 py-3 transition-colors rounded-lg font-medium",
+                isActive 
+                  ? "text-blue-700 bg-blue-50" 
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+              )}
+            >
+              <item.icon size={18} strokeWidth={2} className={cn("shrink-0")} />
+              {!collapsed && <span className="text-xs font-semibold tracking-wide">{item.label}</span>}
+            </NavLink>
+          );
+        })}
       </nav>
 
-      <div className="p-6">
+      <div className="p-4 border-t border-slate-100">
         {!collapsed && (
-          <div className="bg-surface/80 p-5 rounded-3xl border border-border/50 mb-4 animate-in fade-in slide-in-from-bottom-2 duration-700">
-            <div className="flex justify-between items-center mb-3">
-              <span className="text-[9px] text-text-light font-black uppercase tracking-[0.2em]">Fleet Load</span>
-              <span className="text-[10px] font-black text-brand-accent">92%</span>
+          <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
+            <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">System Status</h4>
+            <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                <span className="text-xs font-semibold text-slate-800">Operational</span>
             </div>
-            <div className="w-full bg-border h-1.5 rounded-full overflow-hidden">
-              <div 
-                className="bg-brand-accent h-full rounded-full transition-all duration-1000 ease-out" 
-                style={{ width: '92%' }} 
-              />
-            </div>
-            <p className="text-[9px] text-text-muted font-bold mt-3 leading-relaxed">System performing at high efficiency levels.</p>
           </div>
         )}
-        
-        <button className="flex items-center gap-3 px-5 py-4 text-text-muted hover:text-red-500 w-full transition-all rounded-2xl hover:bg-red-50 group font-black text-[10px] uppercase tracking-widest">
-          <LogOut size={18} strokeWidth={2.5} className="shrink-0 group-hover:-translate-x-1 transition-transform" />
-          {!collapsed && <span>System Logout</span>}
-        </button>
       </div>
 
       <button 
         onClick={() => setCollapsed(!collapsed)}
-        className="absolute -right-3 top-24 bg-paper border border-border shadow-md rounded-full p-1.5 text-text-light hover:text-brand-accent transition-all z-30 active:scale-90"
+        className="absolute -right-3 top-24 bg-white border border-slate-200 shadow-sm rounded-full p-1.5 text-slate-400 hover:text-blue-700 transition-all z-30"
       >
-        <ChevronLeft size={12} strokeWidth={3} className={cn("transition-transform duration-500", collapsed && "rotate-180")} />
+        <ChevronLeft size={12} strokeWidth={2.5} className={cn("transition-transform duration-300", collapsed && "rotate-180")} />
       </button>
     </aside>
   );

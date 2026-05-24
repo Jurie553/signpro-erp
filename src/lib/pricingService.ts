@@ -38,15 +38,18 @@ export const DEFAULT_PRICING_SETTINGS: PricingSettings = {
   ncrNumberingFee: 8.50,
   ncrPerforationFee: 4.00,
   ncrCoverFee: 12.00,
+  materialMarkupPercent: 40,
 };
 
 export const calculateQuoteTotals = (
-  items: { totalPrice: number; totalCost: number }[],
+  items: { totalPrice: number; totalCost: number; basePrice?: number }[],
   isExpress: boolean,
   settings: PricingSettings
 ) => {
-  const subtotal = items.reduce((sum, item) => sum + item.totalPrice, 0);
-  const totalCost = items.reduce((sum, item) => sum + item.totalCost, 0);
+  const baseSubtotal = items.reduce((sum, item) => sum + ((item.basePrice !== undefined ? item.basePrice : item.totalPrice) || 0), 0);
+  const subtotal = items.reduce((sum, item) => sum + (item.totalPrice || 0), 0);
+  const totalCost = items.reduce((sum, item) => sum + (item.totalCost || 0), 0);
+  const totalDiscount = Math.max(0, baseSubtotal - subtotal);
   
   let expressSurcharge = 0;
   if (isExpress) {
@@ -63,12 +66,19 @@ export const calculateQuoteTotals = (
   const profit = taxableAmount - totalCost;
 
   return {
+    baseSubtotal,
+    totalDiscount,
     subtotal,
     expressSurcharge,
     vat,
     total,
     profit
   };
+};
+
+export const getActivePricingSettings = (settingsList: PricingSettings[]): PricingSettings => {
+  if (!settingsList || settingsList.length === 0) return DEFAULT_PRICING_SETTINGS;
+  return settingsList.find(s => s.id === 'pricing') || settingsList[0] || DEFAULT_PRICING_SETTINGS;
 };
 
 export const calculateNCRPrice = (
@@ -95,18 +105,19 @@ export const calculateNCRPrice = (
     
   unitPrice = unitPrice * (1 - discount);
   
-  // Add fees
-  let totalFees = 0;
-  if (hasNumbering) totalFees += settings.ncrNumberingFee;
-  if (hasPerforation) totalFees += settings.ncrPerforationFee;
-  if (hasCover) totalFees += settings.ncrCoverFee;
+  // Add fees per unit
+  let unitFees = 0;
+  if (hasNumbering) unitFees += settings.ncrNumberingFee;
+  if (hasPerforation) unitFees += settings.ncrPerforationFee;
+  if (hasCover) unitFees += settings.ncrCoverFee;
   
-  const totalPrice = (unitPrice * quantity) + totalFees;
-  const unitCost = totalPrice / quantity;
+  const totalPrice = (unitPrice + unitFees) * quantity;
+  const markup = 1 + ((settings.materialMarkupPercent ?? 40) / 100);
+  const costPrice = totalPrice / markup;
   
   return {
-    unitPrice: unitCost,
+    unitPrice: unitPrice + unitFees,
     totalPrice,
-    costPrice: totalPrice * 0.6 // Simplified cost basis
+    costPrice
   };
 };

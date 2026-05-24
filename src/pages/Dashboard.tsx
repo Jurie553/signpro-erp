@@ -1,13 +1,20 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { DollarSign, TrendingUp, Briefcase, FileText, Clock, CheckCircle2, AlertCircle } from 'lucide-react';
+import { DollarSign, TrendingUp, Briefcase, FileText, Clock, CheckCircle2, AlertCircle, Users, Box, Share2, ArrowRight, Loader2 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { useCollection } from '../lib/firestoreService';
-import { Quote, Job } from '../types';
+import { Quote, Job, Client, Product } from '../types';
+import { toast } from 'sonner';
 
 export default function Dashboard() {
-  const { data: quotes } = useCollection<Quote>('quotes');
-  const { data: jobs } = useCollection<Job>('jobs');
+  const navigate = useNavigate();
+  const { data: quotes, loading: quotesLoading } = useCollection<Quote>('quotes');
+  const { data: jobs, loading: jobsLoading } = useCollection<Job>('jobs');
+  const { data: clients, loading: clientsLoading } = useCollection<Client>('clients');
+  const { data: products, loading: productsLoading } = useCollection<Product>('products');
+
+  const loading = quotesLoading || jobsLoading || clientsLoading || productsLoading;
 
   const mtdRevenue = quotes
     .filter(q => q.status === 'Accepted' && new Date(q.createdAt).getMonth() === new Date().getMonth())
@@ -20,7 +27,6 @@ export default function Dashboard() {
   const activeJobsCount = jobs.filter(j => j.stage !== 'Delivered' && j.stage !== 'Cancelled').length;
   const pendingQuotesCount = quotes.filter(q => q.status === 'Sent' || q.status === 'Viewed' || q.status === 'Draft').length;
 
-  // Chart data calculation
   const chartData = [
     { name: 'Mon', revenue: 4200 },
     { name: 'Tue', revenue: 3800 },
@@ -32,131 +38,131 @@ export default function Dashboard() {
   ];
 
   return (
-    <div className="flex flex-col gap-12 animate-in fade-in duration-700">
-      <header className="flex flex-col">
-        <h2 className="text-4xl font-black text-text-main tracking-tighter uppercase italic">Control Center</h2>
-        <p className="text-[10px] font-black text-text-light uppercase tracking-[0.3em] mt-2">Real-time production & revenue monitoring</p>
+    <div className="flex flex-col gap-8 animate-in fade-in duration-300">
+      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-8">
+        <div>
+          <h2 className="text-3xl font-bold text-slate-900 tracking-tight">Studio Pulse</h2>
+          <p className="text-xs font-medium text-slate-500 uppercase tracking-widest mt-1">Live production metrics</p>
+        </div>
+        <div className="flex items-center gap-3 bg-white p-2 rounded-lg border border-slate-200 shadow-sm self-start md:self-auto">
+          <span className="text-[10px] font-semibold text-slate-600 uppercase tracking-widest px-2">System Active</span>
+        </div>
       </header>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-        <StatCard label="Revenue MTD" value={`R ${mtdRevenue.toLocaleString()}`} icon={DollarSign} color="blue" trend="+12.5%" link="/reports" />
-        <StatCard label="Net Profit" value={`R ${mtdProfit.toLocaleString()}`} icon={TrendingUp} color="emerald" trend="+8.2%" link="/reports" />
-        <StatCard label="Active Fleet" value={activeJobsCount.toString()} icon={Briefcase} color="purple" trend="0" link="/jobs" />
-        <StatCard label="Quote Pipeline" value={pendingQuotesCount.toString()} icon={FileText} color="amber" trend="-2" link="/quotes" />
+      {/* Guided Workflow Section */}
+      <section>
+        <div className="flex items-center justify-between mb-6">
+           <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Core Execution Workflow</h3>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <WorkflowStep 
+            id={1}
+            title="Clients"
+            desc="Partner network"
+            icon={Users}
+            link="/clients"
+            isComplete={clients.length > 0}
+            loading={clientsLoading}
+            navigate={navigate}
+          />
+          <WorkflowStep 
+            id={2}
+            title="Products"
+            desc="Unit catalog"
+            icon={Box}
+            link="/products"
+            isComplete={products.length > 0}
+            loading={productsLoading}
+            navigate={navigate}
+          />
+          <WorkflowStep 
+            id={3}
+            title="Quoting"
+            desc="Cost estimation"
+            icon={FileText}
+            link="/quotes"
+            isComplete={quotes.length > 0}
+            loading={quotesLoading}
+            navigate={navigate}
+          />
+          <WorkflowStep 
+            id={4}
+            title="Production"
+            desc="Output flow"
+            icon={Share2}
+            link="/jobs"
+            isComplete={jobs.length > 0}
+            loading={jobsLoading}
+            navigate={navigate}
+          />
+        </div>
+      </section>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+        <StatCard label="Revenue MTD" value={loading ? '...' : `R ${mtdRevenue.toLocaleString()}`} icon={DollarSign} trend="+12.5%" link="/reports" navigate={navigate} />
+        <StatCard label="Net Profit" value={loading ? '...' : `R ${mtdProfit.toLocaleString()}`} icon={TrendingUp} trend="+8.2%" link="/reports" navigate={navigate} />
+        <StatCard label="Active Fleet" value={loading ? '...' : activeJobsCount.toString()} icon={Briefcase} trend="0" link="/jobs" navigate={navigate} />
+        <StatCard label="Quote Pipeline" value={loading ? '...' : pendingQuotesCount.toString()} icon={FileText} trend="-2" link="/quotes" navigate={navigate} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        <div className="lg:col-span-8 card-minimal p-10 relative overflow-hidden">
-          <div className="absolute top-0 right-0 p-8 opacity-5">
-            <TrendingUp size={120} strokeWidth={1} />
-          </div>
-          
-          <div className="flex items-center justify-between mb-12 relative z-10">
-            <div>
-              <h3 className="text-xl font-black text-text-main tracking-tighter uppercase italic">Flow Analysis</h3>
-              <p className="text-[10px] font-black text-text-light uppercase tracking-[0.2em] mt-1">Revenue throughput per cycle</p>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2 px-3 py-1 bg-surface rounded-full border border-border">
-                <div className="w-2 h-2 bg-brand-accent rounded-full animate-pulse" />
-                <span className="text-[10px] font-black text-text-muted uppercase tracking-widest">Live Flow</span>
-              </div>
-            </div>
+        <div className="lg:col-span-8 bg-white border border-slate-200 rounded-lg p-8 shadow-sm">
+          <div className="flex items-center justify-between mb-8">
+            <h3 className="text-lg font-bold text-slate-900">Performance Metrics</h3>
+            <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-1 rounded border border-emerald-100">Live</span>
           </div>
 
-          <div className="h-[420px] relative z-10">
+          <div className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chartData}>
-                <defs>
-                  <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.1}/>
-                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                 <XAxis 
                   dataKey="name" 
                   axisLine={false} 
                   tickLine={false} 
-                  tick={{ fontSize: 10, fontWeight: 800, fill: '#94a3b8', textTransform: 'uppercase' }} 
-                  dy={15}
+                  tick={{ fontSize: 10, fill: '#64748b' }} 
+                  dy={10}
                 />
                 <YAxis 
                   axisLine={false} 
                   tickLine={false} 
-                  tick={{ fontSize: 10, fontWeight: 800, fill: '#94a3b8' }} 
-                  dx={-15}
+                  tick={{ fontSize: 10, fill: '#64748b' }} 
+                  dx={-10}
                 />
                 <Tooltip 
-                  cursor={{ stroke: '#3b82f6', strokeWidth: 2, strokeDasharray: '5 5' }}
-                  contentStyle={{ 
-                    borderRadius: '24px', 
-                    border: '1px solid #e2e8f0', 
-                    boxShadow: '0 20px 40px -10px rgba(0,0,0,0.1)',
-                    padding: '16px',
-                    backgroundColor: 'rgba(255,255,255,0.95)',
-                    backdropFilter: 'blur(10px)'
-                  }} 
-                  labelStyle={{ fontWeight: 900, marginBottom: '8px', fontSize: '12px', color: '#0f172a' }}
+                  contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0' }} 
                 />
                 <Area 
                   type="monotone" 
                   dataKey="revenue" 
-                  stroke="#3b82f6" 
-                  strokeWidth={5} 
-                  fillOpacity={1} 
-                  fill="url(#colorRev)" 
-                  activeDot={{ r: 8, stroke: '#fff', strokeWidth: 4, shadow: '0 0 20px rgba(59,130,246,0.5)' }}
+                  stroke="#2563eb" 
+                  strokeWidth={2} 
+                  fill="#dbeafe" 
                 />
               </AreaChart>
             </ResponsiveContainer>
           </div>
         </div>
 
-        <div className="lg:col-span-4 flex flex-col gap-8">
-          <div className="card-minimal p-10 flex-1 relative overflow-hidden bg-brand text-white">
-            <div className="absolute inset-0 grid-structure opacity-[0.03]" />
-            <h3 className="text-xl font-black tracking-tighter uppercase italic mb-10 relative z-10">Real-Time Log</h3>
+        <div className="lg:col-span-4 flex flex-col gap-4">
+          <div className="bg-white rounded-lg border border-slate-200 p-6 shadow-sm flex-1">
+            <h3 className="text-sm font-bold text-slate-900 mb-6">Activity Log</h3>
             
-            <div className="space-y-6 relative z-10">
-              {quotes.slice(0, 4).map((quote, idx) => (
-                <ActivityItem 
-                  key={quote.id}
-                  icon={quote.status === 'Accepted' ? CheckCircle2 : FileText} 
-                  title={quote.status === 'Accepted' ? "Order Finalized" : "Discovery Quote"} 
-                  subject={quote.quoteNumber} 
-                  time={new Date(quote.createdAt).toLocaleDateString()} 
-                  color="white"
-                  delay={idx * 0.1}
-                />
-              ))}
-              {quotes.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-12 opacity-40">
-                  <Clock className="mb-4" size={32} />
-                  <p className="text-[10px] font-black uppercase tracking-widest text-center">Awaiting System Cycles...</p>
-                </div>
+            <div className="space-y-4">
+              {loading ? (
+                 <div className="flex items-center justify-center py-6 text-slate-400">Loading...</div>
+              ) : (
+                quotes.slice(0, 4).map((quote) => (
+                    <div key={quote.id} className="flex gap-3 text-sm">
+                        <div className="pt-1"><div className="w-2 h-2 rounded-full bg-blue-500" /></div>
+                        <div>
+                            <p className="text-slate-900 font-medium">Quote {quote.status}</p>
+                            <p className="text-slate-500 text-[10px]">{quote.quoteNumber}</p>
+                        </div>
+                    </div>
+                ))
               )}
             </div>
-            
-            <button 
-              onClick={() => window.location.href = '/quotes'}
-              className="w-full mt-12 py-4 text-[10px] font-black uppercase tracking-[0.2em] bg-white/10 hover:bg-white/20 border border-white/10 rounded-2xl transition-all relative z-10"
-            >
-              Access Full Archives
-            </button>
-          </div>
-          
-          <div 
-            onClick={() => alert('Support system active. For urgent issues contact hardware maintenance.')}
-            className="card-minimal p-8 bg-brand-accent text-white group cursor-pointer overflow-hidden transition-transform active:scale-95"
-          >
-             <div className="flex justify-between items-start">
-                <div className="space-y-1">
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-80">Support Status</p>
-                  <h4 className="text-xl font-black tracking-tighter italic">L1 SUPPORT ACTIVE</h4>
-                </div>
-                <AlertCircle className="opacity-50 group-hover:rotate-12 transition-transform" />
-             </div>
           </div>
         </div>
       </div>
@@ -164,59 +170,42 @@ export default function Dashboard() {
   );
 }
 
-function StatCard({ label, value, icon: Icon, color, trend, link }: any) {
-  const colors = {
-    blue: "text-brand-accent border-brand-accent/10 bg-brand-accent/5",
-    emerald: "text-emerald-500 border-emerald-500/10 bg-emerald-500/5",
-    purple: "text-purple-500 border-purple-500/10 bg-purple-500/5",
-    amber: "text-amber-500 border-amber-500/10 bg-amber-500/5",
-  };
-
+function WorkflowStep({ title, desc, icon: Icon, link, isComplete, navigate }: any) {
   return (
     <div 
-      onClick={() => link && (window.location.href = link)}
-      className="card-minimal group cursor-pointer border-border/50 hover:border-brand-accent/30 transition-all duration-500"
+      onClick={() => navigate(link)}
+      className="group cursor-pointer bg-white p-6 rounded-lg border border-slate-200 shadow-sm hover:border-blue-300 transition-all flex flex-col gap-4"
     >
-      <div className="flex items-center justify-between mb-8">
-        <div className={cn("w-14 h-14 rounded-[2rem] flex items-center justify-center border transition-all group-hover:rounded-2xl duration-700", colors[color as keyof typeof colors])}>
-          <Icon size={24} strokeWidth={2.5} className="group-hover:scale-110 transition-transform" />
+      <div className="flex items-center justify-between">
+        <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-700">
+          <Icon size={20} />
         </div>
-        <div className={cn(
-          "px-3 py-1.5 rounded-full flex items-center gap-1.5",
-          trend?.startsWith('+') ? "text-emerald-500 bg-emerald-50/50 border border-emerald-100" : trend?.startsWith('-') ? "text-red-500 bg-red-50/50 border border-red-100" : "text-text-muted bg-surface border border-border"
-        )}>
-          {trend?.startsWith('+') && <TrendingUp size={10} />}
-          <span className="text-[9px] font-black uppercase tracking-wider">{trend === '0' ? 'IDLE' : trend}</span>
+        {isComplete && <div className="w-2 h-2 rounded-full bg-emerald-500" />}
+      </div>
+
+      <div>
+        <h4 className="text-sm font-bold text-slate-900">{title}</h4>
+        <p className="text-xs text-slate-500 mt-0.5">{desc}</p>
+      </div>
+    </div>
+  );
+}
+
+function StatCard({ label, value, icon: Icon, trend, link, navigate }: any) {
+  return (
+    <div 
+      onClick={() => link && navigate(link)}
+      className="bg-white border border-slate-200 rounded-lg p-6 shadow-sm cursor-pointer hover:border-blue-300 transition-all"
+    >
+      <div className="flex items-center justify-between mb-4">
+        <div className="text-slate-400"><Icon size={20} /></div>
+        <div className={cn("text-[10px] font-semibold px-2 py-0.5 rounded", trend?.startsWith('+') ? "text-emerald-700 bg-emerald-50" : "text-slate-600 bg-slate-100")}>
+          {trend}
         </div>
       </div>
       
-      <p className="text-[9px] font-black text-text-light uppercase tracking-[0.2em] mb-2">{label}</p>
-      <h4 className="text-3xl font-black text-text-main tracking-tighter tabular-nums">{value}</h4>
-    </div>
-  );
-}
-
-function ActivityItem({ icon: Icon, title, subject, time, color, delay }: any) {
-  const colors = {
-    blue: "text-brand-accent bg-blue-50/50",
-    emerald: "text-emerald-500 bg-emerald-50",
-    red: "text-red-500 bg-red-50",
-    purple: "text-purple-500 bg-purple-50",
-    white: "text-white bg-white/10"
-  };
-
-  return (
-    <div 
-      className="flex gap-4 group cursor-pointer animate-in fade-in slide-in-from-left-4 duration-500 fill-mode-both"
-      style={{ animationDelay: `${delay}s` }}
-    >
-      <div className={cn("w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 border border-transparent transition-all group-hover:border-current/20", colors[color as keyof typeof colors])}>
-        <Icon size={18} strokeWidth={2.5} />
-      </div>
-      <div className="flex flex-col gap-0.5 justify-center">
-        <span className="text-xs font-black tracking-tight uppercase group-hover:translate-x-1 transition-transform inline-block">{title}</span>
-        <span className="text-[10px] font-medium opacity-60 uppercase tracking-widest">{subject} • {time}</span>
-      </div>
+      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">{label}</p>
+      <h4 className="text-2xl font-bold text-slate-900 mt-1">{value}</h4>
     </div>
   );
 }

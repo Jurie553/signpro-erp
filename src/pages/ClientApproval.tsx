@@ -4,6 +4,7 @@ import { CheckCircle2, MessageSquare, AlertCircle, Clock, Download, Image as Ima
 import { getDocument, updateDocument } from '../lib/firestoreService';
 import { Job, Quote } from '../types';
 import { cn } from '../lib/utils';
+import { toast } from 'sonner';
 
 export default function ClientApproval() {
   const { jobId, quoteId } = useParams<{ jobId?: string, quoteId?: string }>();
@@ -16,19 +17,27 @@ export default function ClientApproval() {
   const [success, setSuccess] = useState(false);
 
   useEffect(() => {
+    console.log('[DEBUG] ClientApproval component mounted');
+  }, []);
+
+  useEffect(() => {
     async function fetchData() {
       try {
         if (jobId) {
           const data = await getDocument('jobs', jobId);
-          const jobData = data as Job;
-          setJob(jobData);
-          if (jobData.artwork && jobData.artwork.length > 0) {
-            setSelectedArtworkId(jobData.artwork[jobData.artwork.length - 1].id);
-            setFeedback(jobData.artwork[jobData.artwork.length - 1].feedback || '');
+          if (data) {
+            const jobData = data as Job;
+            setJob(jobData);
+            if (jobData.artwork && jobData.artwork.length > 0) {
+              setSelectedArtworkId(jobData.artwork[jobData.artwork.length - 1].id);
+              setFeedback(jobData.artwork[jobData.artwork.length - 1].feedback || '');
+            }
           }
         } else if (quoteId) {
           const data = await getDocument('quotes', quoteId);
-          setQuote(data as Quote);
+          if (data) {
+            setQuote(data as Quote);
+          }
         }
       } catch (error) {
         console.error("Error fetching data:", error);
@@ -57,7 +66,7 @@ export default function ClientApproval() {
       setQuote({ ...quote, status });
     } catch (error) {
       console.error("Error updating quote:", error);
-      alert("Failed to submit response. Please try again.");
+      toast.error("Failed to submit response. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -163,38 +172,109 @@ export default function ClientApproval() {
     );
   }
 
-  if (!job || !job.artwork || job.artwork.length === 0) {
+  if (!loading && !quote && !job) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6 text-center">
         <div className="max-w-md">
           <AlertCircle size={64} className="mx-auto text-red-500 mb-6" />
-          <h1 className="text-3xl font-black text-text-main tracking-tighter uppercase italic mb-4">Artwork Not Found</h1>
-          <p className="text-text-muted font-bold">The artwork link you followed is invalid or has been moved. Please contact production for a new link.</p>
+          <h1 className="text-3xl font-black text-text-main tracking-tighter uppercase italic mb-4">Record Not Found</h1>
+          <p className="text-text-muted font-bold">The link you followed is invalid or the document has been removed. Please contact us for a new link.</p>
         </div>
       </div>
     );
   }
 
-  const currentArtwork = job.artwork.find(a => a.id === selectedArtworkId) || job.artwork[job.artwork.length - 1];
+  const artworks = job?.artwork || [];
+  const currentArtwork = artworks.find(a => a.id === selectedArtworkId) || artworks[artworks.length - 1];
+
+  if (jobId && (!job || artworks.length === 0)) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6 text-center">
+        <div className="max-w-md">
+          <AlertCircle size={64} className="mx-auto text-red-500 mb-6" />
+          <h1 className="text-3xl font-black text-text-main tracking-tighter uppercase italic mb-4">Artwork Not Found</h1>
+          <p className="text-text-muted font-bold">No artwork proofs have been uploaded for this job yet. Please check back later or contact production.</p>
+        </div>
+      </div>
+    );
+  }
 
   const handleAction = async (status: 'Approved' | 'Changes Requested') => {
     if (!jobId || !job || !currentArtwork) return;
     setIsSubmitting(true);
     
-    const updatedArtwork = job.artwork.map(art => 
+    const newComment = feedback.trim() ? {
+      id: Math.random().toString(36).substr(2, 9),
+      text: feedback.trim(),
+      author: 'Client' as const,
+      createdAt: Date.now()
+    } : null;
+
+    const updatedArtwork = job.artwork?.map(art => {
+      if (art.id === currentArtwork.id) {
+        const existingComments = art.comments || [];
+        const newComments = newComment ? [...existingComments, newComment] : existingComments;
+        
+        // Also add a system comment for status change if it's different
+        const finalComments = art.status !== status ? [
+          ...newComments,
+          {
+            id: Math.random().toString(36).substr(2, 9),
+            text: `Artwork ${status === 'Approved' ? 'approved' : 'changes requested'} by client.`,
+            author: 'System' as const,
+            createdAt: Date.now()
+          }
+        ] : newComments;
+
+        return { 
+          ...art, 
+          status, 
+          feedback: feedback || art.feedback, // Keep legacy field updated too
+          comments: finalComments
+        };
+      }
+      return art;
+    });
+
+    try {
+      await updateDocument('jobs', jobId, { artwork: updatedArtwork });
+      setSuccess(true);
+      setFeedback(''); // Clear feedback after successful submit
+      // Update local state
+      if (updatedArtwork) setJob({ ...job, artwork: updatedArtwork });
+    } catch (error) {
+      console.error("Error updating artwork:", error);
+      toast.error("Failed to submit appraisal. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleAddCommentOnly = async () => {
+    if (!jobId || !job || !currentArtwork || !feedback.trim()) return;
+    setIsSubmitting(true);
+    
+    const newComment = {
+      id: Math.random().toString(36).substr(2, 9),
+      text: feedback.trim(),
+      author: 'Client' as const,
+      createdAt: Date.now()
+    };
+
+    const updatedArtwork = job.artwork?.map(art => 
       art.id === currentArtwork.id 
-        ? { ...art, status, feedback: feedback || art.feedback }
+        ? { ...art, comments: [...(art.comments || []), newComment] }
         : art
     );
 
     try {
       await updateDocument('jobs', jobId, { artwork: updatedArtwork });
-      setSuccess(true);
-      // Update local state
-      setJob({ ...job, artwork: updatedArtwork });
+      setFeedback('');
+      if (updatedArtwork) setJob({ ...job, artwork: updatedArtwork });
+      toast.success("Comment added");
     } catch (error) {
-      console.error("Error updating artwork:", error);
-      alert("Failed to submit appraisal. Please try again.");
+      console.error("Error adding comment:", error);
+      toast.error("Failed to add comment.");
     } finally {
       setIsSubmitting(false);
     }
@@ -278,36 +358,82 @@ export default function ClientApproval() {
           </div>
 
           <div className="flex flex-col gap-6">
-            <div className="bg-white p-8 rounded-[2.5rem] border border-border shadow-xl shadow-gray-200/50">
+            <div className="bg-white p-8 rounded-[2.5rem] border border-border shadow-xl shadow-gray-200/50 flex flex-col h-[700px]">
               <h3 className="text-lg font-black text-text-main uppercase tracking-tight mb-6 flex items-center gap-2">
                 <MessageSquare className="text-brand" size={20} />
-                Client Feedback
+                Feedback Thread
               </h3>
               
-              <textarea 
-                value={feedback}
-                onChange={(e) => setFeedback(e.target.value)}
-                placeholder="Enter corrections or approval notes here..."
-                className="w-full h-40 px-6 py-4 bg-gray-50 border border-border rounded-3xl font-bold text-sm focus:outline-none focus:ring-4 focus:ring-brand/5 focus:border-brand transition-all resize-none mb-6"
-              />
+              <div className="flex-1 overflow-y-auto space-y-4 mb-6 pr-2 scrollbar-thin">
+                {(currentArtwork.comments?.length || 0) === 0 ? (
+                  <div className="h-full flex flex-col items-center justify-center text-center opacity-40">
+                    <MessageSquare size={48} className="mb-4" />
+                    <p className="text-[10px] font-black uppercase tracking-widest">No feedback yet</p>
+                  </div>
+                ) : (
+                  currentArtwork.comments?.map((comment) => (
+                    <div 
+                      key={comment.id}
+                      className={cn(
+                        "flex flex-col max-w-[85%]",
+                        comment.author === 'Client' ? "ml-auto items-end" : "mr-auto items-start",
+                        comment.author === 'System' && "mx-auto w-full items-center opacity-60"
+                      )}
+                    >
+                      <div className={cn(
+                        "px-4 py-3 rounded-2xl text-[11px] font-bold",
+                        comment.author === 'Client' ? "bg-brand text-white rounded-tr-none" : 
+                        comment.author === 'Staff' ? "bg-surface border border-border rounded-tl-none text-text-main" :
+                        "bg-gray-100 text-text-light italic text-[10px] text-center"
+                      )}>
+                        {comment.text}
+                      </div>
+                      <span className="text-[8px] font-black uppercase text-text-light mt-1 opacity-50 px-1">
+                        {comment.author === 'System' ? 'System Notification' : comment.author} • {new Date(comment.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <button 
-                  onClick={() => handleAction('Changes Requested')}
-                  disabled={isSubmitting}
-                  className="py-5 bg-white text-red-600 border border-red-100 rounded-3xl font-black text-[10px] uppercase tracking-widest hover:bg-red-50 transition-all flex flex-col items-center justify-center gap-2"
-                >
-                  <AlertCircle size={24} />
-                  Request Changes
-                </button>
-                <button 
-                  onClick={() => handleAction('Approved')}
-                  disabled={isSubmitting}
-                  className="py-5 bg-emerald-500 text-white border border-emerald-400 rounded-3xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-emerald-100 hover:-translate-y-1 transition-all flex flex-col items-center justify-center gap-2"
-                >
-                  <CheckCircle2 size={24} />
-                  Approve Artwork
-                </button>
+              <div className="space-y-4">
+                <div className="relative">
+                  <textarea 
+                    value={feedback}
+                    onChange={(e) => setFeedback(e.target.value)}
+                    placeholder="Enter corrections or approval notes here..."
+                    className="w-full h-24 px-6 py-4 bg-gray-50 border border-border rounded-3xl font-bold text-sm focus:outline-none focus:ring-4 focus:ring-brand/5 focus:border-brand transition-all resize-none"
+                  />
+                  {feedback.trim() && (
+                    <button 
+                      onClick={handleAddCommentOnly}
+                      disabled={isSubmitting}
+                      className="absolute right-4 bottom-4 p-2 bg-brand text-white rounded-xl shadow-lg hover:scale-110 active:scale-95 transition-all"
+                      title="Post message only"
+                    >
+                      <Send size={16} />
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <button 
+                    onClick={() => handleAction('Changes Requested')}
+                    disabled={isSubmitting}
+                    className="py-4 bg-white text-red-600 border border-red-100 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-red-50 transition-all flex items-center justify-center gap-2"
+                  >
+                    <AlertCircle size={18} />
+                    Request Changes
+                  </button>
+                  <button 
+                    onClick={() => handleAction('Approved')}
+                    disabled={isSubmitting}
+                    className="py-4 bg-emerald-500 text-white border border-emerald-400 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-emerald-100 hover:-translate-y-1 transition-all flex items-center justify-center gap-2"
+                  >
+                    <CheckCircle2 size={18} />
+                    Approve Version
+                  </button>
+                </div>
               </div>
             </div>
 
