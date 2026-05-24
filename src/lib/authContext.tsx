@@ -1,11 +1,11 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { onAuthStateChanged, User } from 'firebase/auth';
+import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, User } from 'firebase/auth';
 import { auth } from './firebase';
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  login?: () => Promise<void>;
+  login: () => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -23,12 +23,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return unsubscribe;
   }, []);
 
+  const login = async () => {
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
+    await signInWithPopup(auth, provider);
+  };
+
   const logout = async () => {
     await auth.signOut();
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, logout }}>
       {children}
     </AuthContext.Provider>
   );

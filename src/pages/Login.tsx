@@ -1,9 +1,19 @@
 import React from 'react';
 import { useAuth } from '../lib/authContext';
 import { LogIn } from 'lucide-react';
+import { toast } from 'sonner';
 
 export default function Login() {
-  const { login } = useAuth();
+  const { login, loading } = useAuth();
+
+  const handleLogin = async () => {
+    try {
+      await login();
+    } catch (error) {
+      console.error('Login failed:', error);
+      toast.error('Google sign-in failed. Please try again.');
+    }
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-surface p-6">
@@ -16,11 +26,12 @@ export default function Login() {
         <p className="text-text-muted mb-10">Sign in to your SignPro ERP account to continue.</p>
         
         <button 
-          onClick={login}
-          className="w-full flex items-center justify-center gap-4 bg-white border border-border py-4 rounded-2xl font-bold text-text-main hover:bg-gray-50 transition-all shadow-sm group"
+          onClick={handleLogin}
+          disabled={loading}
+          className="w-full flex items-center justify-center gap-4 bg-white border border-border py-4 rounded-2xl font-bold text-text-main hover:bg-gray-50 transition-all shadow-sm group disabled:opacity-60 disabled:cursor-not-allowed"
         >
           <img src="https://www.google.com/favicon.ico" alt="Google" className="w-5 h-5 group-hover:scale-110 transition-transform" />
-          Sign in with Google
+          {loading ? 'Checking session...' : 'Sign in with Google'}
         </button>
         
         <p className="mt-8 text-[11px] text-text-light font-bold uppercase tracking-widest leading-loose">
